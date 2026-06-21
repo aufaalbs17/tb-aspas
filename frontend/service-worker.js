@@ -1,9 +1,11 @@
-const CACHE_NAME = 'trans-padang-v9';
+const CACHE_NAME = 'trans-padang-v13';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/map',
   '/map.html',
+  '/admin',
+  '/admin.html',
   '/public/css/style.css',
   '/public/js/map.js',
   '/manifest.json',
@@ -39,7 +41,7 @@ self.addEventListener('activate', function(e) {
 self.addEventListener('fetch', function(e) {
   const url = new URL(e.request.url);
 
-  // Untuk request API, gunakan Network First, fallback to Cache
+  // API Requests: Network First
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(e.request).then(response => {
@@ -51,7 +53,20 @@ self.addEventListener('fetch', function(e) {
     return;
   }
 
-  // Untuk aset statis, gunakan Cache First, fallback to Network
+  // HTML Requests (Pages): Network First, fallback to cache
+  // This prevents the issue where UI updates are stuck in cache
+  if (e.request.mode === 'navigate' || e.request.headers.get('accept').includes('text/html')) {
+    e.respondWith(
+      fetch(e.request).then(response => {
+        const resClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, resClone));
+        return response;
+      }).catch(() => caches.match(e.request).then(res => res || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Other Static Assets (JS, CSS, Images): Cache First, fallback to Network
   e.respondWith(
     caches.match(e.request).then(function(response) {
       return response || fetch(e.request).then(fetchRes => {
@@ -61,10 +76,7 @@ self.addEventListener('fetch', function(e) {
         });
       });
     }).catch(() => {
-      // Offline fallback if needed
-      if (e.request.mode === 'navigate') {
-        return caches.match('/index.html');
-      }
+      // Ignore
     })
   );
 });

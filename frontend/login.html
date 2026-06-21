@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Admin - Trans Padang WebGIS</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    :root {
+      --primary-color: #007AFF;
+      --glass-bg: rgba(255, 255, 255, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.9);
+      --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      --text-main: #1c1c1e;
+      --text-muted: #8e8e93;
+      --danger-color: #ff3b30;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body, html {
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f2f2f7;
+      /* Same grid pattern as index */
+      background-image:
+        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+      background-size: 28px 28px;
+      overflow: hidden;
+    }
+
+    /* Ambient blobs — same style as index/map */
+    .ambient-bg {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .blob {
+      position: absolute; border-radius: 50%;
+      filter: blur(90px); opacity: 0.55;
+      animation: blobFloat 12s ease-in-out infinite;
+    }
+    .blob-1 { width:550px; height:550px; background:rgba(0,122,255,0.22); top:-150px; right:-100px; }
+    .blob-2 { width:450px; height:450px; background:rgba(52,199,89,0.15); bottom:-120px; left:-80px; animation-delay:4s; }
+    .blob-3 { width:350px; height:350px; background:rgba(255,149,0,0.12); top:50%; left:30%; animation-delay:8s; }
+    @keyframes blobFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(28px) scale(1.05); }
+    }
+
+    /* Center wrapper */
+    .center-wrap {
+      position: relative; z-index: 10;
+      height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 24px;
+    }
+
+    /* Brand section */
+    .brand {
+      text-align: center; margin-bottom: 32px;
+    }
+    .brand-icon {
+      width: 68px; height: 68px; border-radius: 22px;
+      background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 30px; color: white; margin-bottom: 14px;
+      box-shadow: 0 12px 30px rgba(0,122,255,0.35), inset 0 1px 1px rgba(255,255,255,0.3);
+      animation: iconPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes iconPop {
+      from { transform: scale(0.5); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    .brand-title {
+      font-size: 22px; font-weight: 800; color: var(--text-main); margin-bottom: 4px;
+    }
+    .brand-subtitle { font-size: 13px; color: var(--text-muted); }
+
+    /* Login card — same glassmorphism as omnibox */
+    .login-card {
+      width: 100%; max-width: 390px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(40px) saturate(200%);
+      -webkit-backdrop-filter: blur(40px) saturate(200%);
+      border: 1px solid var(--glass-border);
+      border-radius: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.8);
+      padding: 36px 32px;
+      animation: cardSlide 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes cardSlide {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .card-heading {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 6px;
+    }
+    .card-heading h2 {
+      font-size: 18px; font-weight: 700; color: var(--text-main);
+    }
+    .card-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 26px; }
+
+    /* Form labels — matches sidebar style */
+    .form-group { margin-bottom: 15px; }
+    .form-group label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: var(--text-main); margin-bottom: 7px;
+    }
+    .input-wrap { position: relative; display: flex; align-items: center; }
+    .input-wrap .input-icon {
+      position: absolute; left: 14px;
+      color: var(--text-muted); font-size: 14px;
+    }
+    .input-wrap input {
+      width: 100%; padding: 13px 14px 13px 42px;
+      border: 1px solid var(--glass-border);
+      border-radius: 16px; background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif; font-size: 15px;
+      transition: all 0.2s;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .input-wrap input::placeholder { color: var(--text-muted); opacity: 0.7; }
+    .input-wrap input:focus {
+      outline: none; border-color: var(--primary-color);
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.15), inset 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .toggle-pw {
+      position: absolute; right: 14px;
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 14px; padding: 4px;
+      transition: color 0.2s;
+    }
+    .toggle-pw:hover { color: var(--primary-color); }
+
+    /* Error box */
+    .error-msg {
+      display: none; align-items: center; gap: 8px;
+      background: rgba(255,59,48,0.08);
+      border: 1px solid rgba(255,59,48,0.2);
+      border-radius: 12px; padding: 11px 14px;
+      font-size: 13px; color: var(--danger-color);
+      margin-bottom: 16px;
+    }
+    .error-msg.show { display: flex; }
+
+    /* Submit — matches .btn-primary in style.css */
+    .btn-login {
+      width: 100%; padding: 15px;
+      background: var(--primary-color); color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 16px;
+      font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700;
+      cursor: pointer; margin-top: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      box-shadow: 0 8px 20px rgba(0,122,255,0.3), inset 0 1px 1px rgba(255,255,255,0.3);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-login:hover {
+      background: #0056b3;
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 12px 25px rgba(0,122,255,0.4);
+    }
+    .btn-login:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+    /* Divider & back link */
+    .back-link {
+      text-align: center; margin-top: 20px;
+      font-size: 13px; color: var(--text-muted);
+    }
+    .back-link a {
+      color: var(--primary-color); text-decoration: none; font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .back-link a:hover { opacity: 0.75; }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="center-wrap">
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-icon"><i class="fa-solid fa-bus"></i></div>
+      <div class="brand-title">Trans Padang WebGIS</div>
+      <div class="brand-subtitle">Sistem Routing Koridor 5 &amp; 6</div>
+    </div>
+
+    <!-- Card -->
+    <div class="login-card">
+      <div class="card-heading">
+        <i class="fa-solid fa-shield-halved" style="color: var(--primary-color); font-size: 18px;"></i>
+        <h2>Portal Admin</h2>
+      </div>
+      <p class="card-desc">Masukkan kredensial Anda untuk mengelola data halte.</p>
+
+      <!-- Error banner -->
+      <div class="error-msg" id="error-msg">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="error-text">Username atau password salah</span>
+      </div>
+
+      <form id="login-form" autocomplete="on">
+        <div class="form-group">
+          <label><i class="fa-solid fa-user" style="margin-right:5px; color:var(--primary-color);"></i> Username</label>
+          <div class="input-wrap">
+            <i class="fa-solid fa-user input-icon"></i>
+            <input type="text" id="username" placeholder="Masukkan username" required autocomplete="username">
+          </div>
+        </div>
+        <div class="form-group">
+          <label><i class="fa-solid fa-lock" style="margin-right:5px; color:var(--primary-color);"></i> Password</label>
+          <div class="input-wrap">
+            <i class="fa-solid fa-lock input-icon"></i>
+            <input type="password" id="password" placeholder="Masukkan password" required autocomplete="current-password">
+            <button type="button" class="toggle-pw" id="toggle-pw-btn" onclick="togglePassword()">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" id="login-btn">
+          <i class="fa-solid fa-right-to-bracket"></i> Masuk ke Dashboard
+        </button>
+      </form>
+
+      <div class="back-link">
+        <a href="/map"><i class="fa-solid fa-arrow-left"></i> Kembali ke Peta</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function togglePassword() {
+      const input = document.getElementById('password');
+      const icon = document.querySelector('#toggle-pw-btn i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash';
+      } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye';
+      }
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('login-btn');
+      const errorEl = document.getElementById('error-msg');
+      const errorText = document.getElementById('error-text');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memverifikasi...';
+      errorEl.classList.remove('show');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem('admin_token', data.token);
+          localStorage.setItem('admin_username', data.username);
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Berhasil! Mengalihkan...';
+          // Delay sedikit agar user melihat feedback sukses
+          setTimeout(() => { window.location.href = '/admin'; }, 600);
+        } else {
+          errorText.textContent = data.error || 'Login gagal, coba lagi';
+          errorEl.classList.add('show');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Masuk ke Dashboard';
+        }
+      } catch (err) {
+        errorText.textContent = 'Tidak dapat terhubung ke server';
+        errorEl.classList.add('show');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Masuk ke Dashboard';
+      }
+    });
+  </script>
+</body>
+</html>

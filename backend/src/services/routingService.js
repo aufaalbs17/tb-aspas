@@ -83,3 +83,34 @@ exports.getAllHaltes = async () => {
   const result = await db.query(query);
   return result.rows;
 };
+
+exports.createHalte = async (nama_halte, koridor, lon, lat) => {
+  const query = `
+    INSERT INTO kordinat_k5_k6 (nama_halte, koridor, geom) 
+    VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326))
+    RETURNING id_0 as id, nama_halte, koridor, ST_AsGeoJSON(geom) as geometry;
+  `;
+  const result = await db.query(query, [nama_halte, koridor, lon, lat]);
+  return result.rows[0];
+};
+
+exports.updateHalte = async (id, nama_halte, koridor, lon, lat) => {
+  const query = `
+    UPDATE kordinat_k5_k6 
+    SET nama_halte = $1, koridor = $2, geom = ST_SetSRID(ST_MakePoint($3, $4), 4326)
+    WHERE id_0 = $5
+    RETURNING id_0 as id, nama_halte, koridor, ST_AsGeoJSON(geom) as geometry;
+  `;
+  const result = await db.query(query, [nama_halte, koridor, lon, lat, id]);
+  return result.rows[0];
+};
+
+exports.deleteHalte = async (id) => {
+  const query = `
+    DELETE FROM kordinat_k5_k6 
+    WHERE id_0 = $1
+    RETURNING id_0 as id;
+  `;
+  const result = await db.query(query, [id]);
+  return result.rows[0];
+};

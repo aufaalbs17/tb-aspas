@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Trans Padang WebGIS</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    :root {
+      --primary: #007AFF;
+      --danger: #ff3b30;
+      --success: #34c759;
+      --warning: #ff9500;
+      --bg: #f2f2f7;
+      --glass-bg: rgba(255, 255, 255, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.5);
+      --text-main: #1c1c1e;
+      --text-muted: #8e8e93;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      /* Subtle grid pattern */
+      background-image:
+        linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: var(--text-main);
+      overflow-x: hidden;
+    }
+
+    /* Ambient background blobs */
+    .ambient-bg {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .blob {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); opacity: 0.6;
+      animation: blobFloat 14s ease-in-out infinite;
+    }
+    .blob-1 { width:500px; height:500px; background: rgba(0,122,255,0.18); top:-150px; right:-80px; }
+    .blob-2 { width:400px; height:400px; background: rgba(255,149,0,0.15); bottom:-100px; left:-80px; animation-delay:4s; }
+    .blob-3 { width:300px; height:300px; background: rgba(52,199,89,0.12); top:50%; left:40%; animation-delay:8s; }
+    @keyframes blobFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(30px) scale(1.06); }
+    }
+
+    /* ======== NAVBAR ======== */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--glass-bg);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border-bottom: 1px solid var(--glass-border);
+      padding: 14px 28px;
+      display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+    .navbar-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 18px; font-weight: 800; color: var(--primary);
+    }
+    .navbar-brand .icon-wrap {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary), #3b82f6);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 16px;
+      box-shadow: 0 4px 10px rgba(0,122,255,0.35);
+    }
+    .navbar-link {
+      display: flex; align-items: center; gap: 8px;
+      text-decoration: none; color: var(--text-main);
+      font-size: 14px; font-weight: 600;
+      padding: 9px 18px; border-radius: 50px;
+      background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .navbar-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      background: rgba(255,255,255,0.9);
+    }
+
+    /* ======== CONTAINER ======== */
+    .container {
+      position: relative; z-index: 10;
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 20px;
+    }
+
+    /* ======== TOOLBAR ======== */
+    .toolbar {
+      background: var(--glass-bg);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 18px 22px;
+      margin-bottom: 20px;
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.07);
+    }
+
+    /* Search Input di Toolbar */
+    .toolbar-search {
+      flex: 1; min-width: 220px;
+      position: relative; display: flex; align-items: center;
+    }
+    .toolbar-search i {
+      position: absolute; left: 14px;
+      color: var(--text-muted); font-size: 14px;
+    }
+    .toolbar-search input {
+      width: 100%; padding: 11px 14px 11px 40px;
+      border: 1px solid rgba(255,255,255,0.7);
+      border-radius: 14px; font-family: 'Inter', sans-serif;
+      font-size: 14px; background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(10px); color: var(--text-main);
+      transition: all 0.2s;
+    }
+    .toolbar-search input:focus {
+      outline: none; border-color: var(--primary);
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+    }
+
+    /* Koridor Filter Toolbar */
+    .koridor-group {
+      display: flex; gap: 8px;
+    }
+    .koridor-chip {
+      padding: 9px 16px; border-radius: 12px;
+      border: 1px solid rgba(0,122,255,0.25);
+      background: rgba(255,255,255,0.5);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .koridor-chip.active {
+      background: var(--primary); color: white;
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(0,122,255,0.3);
+    }
+    .koridor-chip:not(.active):hover { background: rgba(0,122,255,0.1); }
+
+    /* Add Button */
+    .btn-add {
+      display: flex; align-items: center; gap: 8px;
+      padding: 11px 20px; border-radius: 14px;
+      background: var(--primary); color: white;
+      border: none; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,122,255,0.35);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      white-space: nowrap;
+    }
+    .btn-add:hover {
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 10px 25px rgba(0,122,255,0.45);
+    }
+
+    /* ======== TABLE CARD ======== */
+    .table-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.07);
+      overflow: hidden;
+    }
+    .table-card-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--glass-border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .table-card-header h2 {
+      margin: 0; font-size: 17px; font-weight: 700;
+    }
+    .badge-count {
+      background: rgba(0,122,255,0.12); color: var(--primary);
+      font-size: 12px; font-weight: 700;
+      padding: 3px 10px; border-radius: 50px;
+    }
+
+    /* Table Styles */
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 13px 20px; text-align: left;
+      font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text-muted);
+      background: rgba(0,0,0,0.02);
+      border-bottom: 1px solid var(--glass-border);
+    }
+    tbody td { padding: 15px 20px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background 0.15s; }
+    tbody tr:hover { background: rgba(0,122,255,0.03); }
+
+    /* Table specific styles */
+    .cell-id { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+    .cell-name { font-weight: 600; font-size: 14px; }
+    .badge-koridor {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 11px; border-radius: 50px; font-size: 12px; font-weight: 700;
+    }
+    .badge-koridor.k5 { background: rgba(234,179,8,0.12); color: #ca8a04; }
+    .badge-koridor.k6 { background: rgba(0,122,255,0.1); color: var(--primary); }
+    .cell-coords {
+      font-size: 12.5px; color: #475569;
+      background: rgba(0,0,0,0.04); padding: 5px 9px;
+      border-radius: 8px; font-family: 'SF Mono', monospace;
+      display: inline-block;
+    }
+    .action-btns { display: flex; gap: 8px; }
+    .btn-action {
+      width: 34px; height: 34px; border-radius: 10px;
+      border: none; cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-edit { background: rgba(255,149,0,0.12); color: var(--warning); }
+    .btn-edit:hover { background: var(--warning); color: white; transform: scale(1.1); }
+    .btn-del { background: rgba(255,59,48,0.1); color: var(--danger); }
+    .btn-del:hover { background: var(--danger); color: white; transform: scale(1.1); }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--text-muted);
+    }
+    .empty-state i { font-size: 44px; margin-bottom: 16px; opacity: 0.3; display: block; }
+    .empty-state p { font-size: 15px; margin: 4px 0; }
+
+    /* ======== MODAL ======== */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      z-index: 1000; display: none;
+      justify-content: center; align-items: center;
+      transition: opacity 0.3s;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal-box {
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border: 1px solid rgba(255,255,255,0.7);
+      border-radius: 28px;
+      padding: 36px 32px;
+      width: 90%; max-width: 560px;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.2);
+      animation: modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    @keyframes modalIn {
+      from { transform: translateY(30px) scale(0.95); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .modal-title {
+      margin: 0 0 24px 0; font-size: 22px; font-weight: 800;
+    }
+
+    .form-group { margin-bottom: 15px; }
+    .form-group label {
+      display: block; margin-bottom: 7px;
+      font-size: 13px; font-weight: 600; color: var(--text-muted);
+    }
+    .form-group input, .form-group select {
+      width: 100%; padding: 12px 16px;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 14px; font-family: 'Inter', sans-serif;
+      font-size: 15px; background: rgba(255,255,255,0.6);
+      transition: all 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none; border-color: var(--primary);
+      background: white; box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-footer {
+      display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px;
+    }
+    .btn-cancel {
+      padding: 12px 22px; border-radius: 14px;
+      background: rgba(0,0,0,0.07); color: var(--text-main);
+      border: none; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-cancel:hover { background: rgba(0,0,0,0.12); }
+    .btn-save {
+      padding: 12px 22px; border-radius: 14px;
+      background: var(--primary); color: white;
+      border: none; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 6px 16px rgba(0,122,255,0.35);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-save:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,122,255,0.45); }
+
+    /* Mini-map picker */
+    #location-picker-map {
+      width: 100%;
+      height: 220px;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,0.1);
+      margin-top: 6px;
+      cursor: crosshair;
+      overflow: hidden;
+    }
+    .map-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #picked-coords-display {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--primary);
+      background: rgba(0,122,255,0.08);
+      border-radius: 8px;
+      padding: 5px 10px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    /* ======== TOAST & CONFIRM MODAL (GLASS) ======== */
+    .glass-toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      padding: 14px 24px;
+      border-radius: 50px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      z-index: 9999;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      pointer-events: none;
+    }
+    .glass-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .glass-toast.error i { color: var(--danger); }
+    .glass-toast.success i { color: var(--success); }
+
+    .glass-confirm-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.25);
+      backdrop-filter: blur(8px);
+      z-index: 9999; display: none;
+      justify-content: center; align-items: center;
+    }
+    .glass-confirm-overlay.active { display: flex; }
+    .glass-confirm-box {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(30px);
+      border: 1px solid rgba(255,255,255,0.8);
+      padding: 30px;
+      border-radius: 24px;
+      width: 90%; max-width: 360px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+      animation: modalIn 0.3s ease-out;
+    }
+    .glass-confirm-icon {
+      font-size: 40px; color: var(--danger);
+      margin-bottom: 16px;
+    }
+    .glass-confirm-text {
+      font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 24px;
+    }
+    .glass-confirm-actions {
+      display: flex; gap: 10px; justify-content: center;
+    }
+    .btn-confirm-cancel {
+      flex: 1; padding: 10px; border-radius: 12px; border: none;
+      background: rgba(0,0,0,0.05); color: var(--text-main);
+      font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    .btn-confirm-cancel:hover { background: rgba(0,0,0,0.1); }
+    .btn-confirm-ok {
+      flex: 1; padding: 10px; border-radius: 12px; border: none;
+      background: var(--danger); color: white;
+      font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    .btn-confirm-ok:hover { background: #e03026; }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <div class="icon-wrap"><i class="fa-solid fa-bus"></i></div>
+      Admin Trans Padang
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="font-size:13px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+        <i class="fa-solid fa-circle-user" style="color:var(--primary);"></i>
+        <span id="navbar-user">admin</span>
+      </span>
+      <a href="/map" class="navbar-link">
+        <i class="fa-solid fa-map"></i> Peta
+      </a>
+      <button onclick="logout()" class="navbar-link" style="border:none; cursor:pointer; color:var(--danger); background:rgba(255,59,48,0.08); border:1px solid rgba(255,59,48,0.15);">
+        <i class="fa-solid fa-right-from-bracket"></i> Keluar
+      </button>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Toolbar: Search + Filter + Add -->
+    <div class="toolbar">
+      <div class="toolbar-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="admin-search" placeholder="Cari nama halte..." oninput="applyFilter()">
+      </div>
+
+      <div class="koridor-group">
+        <button class="koridor-chip active" data-k="all" onclick="setAdminKoridor('all', this)">Semua</button>
+        <button class="koridor-chip" data-k="K5" onclick="setAdminKoridor('K5', this)">Koridor 5</button>
+        <button class="koridor-chip" data-k="K6" onclick="setAdminKoridor('K6', this)">Koridor 6</button>
+      </div>
+
+      <button class="btn-add" onclick="openModal()">
+        <i class="fa-solid fa-plus"></i> Tambah Halte
+      </button>
+    </div>
+
+    <!-- Table Card -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <h2>Daftar Halte</h2>
+        <span class="badge-count" id="halte-count">0 halte</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nama Halte</th>
+              <th>Koridor</th>
+              <th>Koordinat (Lon, Lat)</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="halte-table-body">
+            <tr><td colspan="5"><div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i><p>Memuat data...</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal Form -->
+  <div class="modal-overlay" id="halte-modal" onclick="handleOverlayClick(event)">
+    <div class="modal-box">
+      <h2 class="modal-title" id="modal-title">Tambah Halte Baru</h2>
+      <form id="halte-form">
+        <input type="hidden" id="halte-id">
+        <div class="form-group">
+          <label>Nama Halte</label>
+          <input type="text" id="nama_halte" required placeholder="Contoh: Halte UNP">
+        </div>
+        <div class="form-group">
+          <label>Koridor</label>
+          <select id="koridor" required>
+            <option value="K5">Koridor 5 (K5)</option>
+            <option value="K6">Koridor 6 (K6)</option>
+          </select>
+        </div>
+
+        <!-- Koordinat: input manual + picker peta -->
+        <div class="form-group">
+          <label><i class="fa-solid fa-map-location-dot" style="color:var(--primary); margin-right:5px;"></i> Koordinat — Klik Peta atau Isi Manual</label>
+          <div id="location-picker-map"></div>
+          <div id="picked-coords-display"><i class="fa-solid fa-check-circle"></i> <span id="picked-coords-text">—</span></div>
+          <p class="map-hint"><i class="fa-solid fa-info-circle"></i> Klik titik mana saja pada peta untuk mengisi koordinat otomatis.</p>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Longitude (X)</label>
+            <input type="number" step="any" id="lon" required placeholder="100.xxxx">
+          </div>
+          <div class="form-group">
+            <label>Latitude (Y)</label>
+            <input type="number" step="any" id="lat" required placeholder="-0.xxxx">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" onclick="closeModal()">Batal</button>
+          <button type="submit" class="btn-save"><i class="fa-solid fa-check"></i> Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="glass-toast" class="glass-toast">
+    <i class="fa-solid fa-circle-exclamation"></i>
+    <span id="glass-toast-text">Peringatan</span>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div class="glass-confirm-overlay" id="glass-confirm">
+    <div class="glass-confirm-box">
+      <i class="fa-solid fa-triangle-exclamation glass-confirm-icon"></i>
+      <div class="glass-confirm-text" id="glass-confirm-text">Apakah Anda yakin?</div>
+      <div class="glass-confirm-actions">
+        <button class="btn-confirm-cancel" onclick="closeConfirm()">Batal</button>
+        <button class="btn-confirm-ok" id="btn-confirm-ok">Yakin</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // ======== AUTH GUARD ========
+    const token = localStorage.getItem('admin_token');
+    const adminUsername = localStorage.getItem('admin_username');
+
+    if (!token) {
+      window.location.href = '/login';
+    }
+
+    // Tampilkan nama user di navbar
+    document.addEventListener('DOMContentLoaded', () => {
+      const userEl = document.getElementById('navbar-user');
+      if (userEl && adminUsername) {
+        userEl.textContent = adminUsername;
+      }
+    });
+
+    function logout() {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_username');
+      window.location.href = '/login';
+    }
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+    }
+
+    // ======== MINI MAP PICKER ========
+    let pickerMap = null;
+    let pickerMarker = null;
+
+    function initPickerMap() {
+      if (pickerMap) {
+        pickerMap.invalidateSize();
+        return;
+      }
+      pickerMap = L.map('location-picker-map', { zoomControl: true }).setView([-0.9471, 100.3658], 13);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      }).addTo(pickerMap);
+
+      pickerMap.on('click', function(e) {
+        const lat = e.latlng.lat.toFixed(6);
+        const lon = e.latlng.lng.toFixed(6);
+
+        document.getElementById('lat').value = lat;
+        document.getElementById('lon').value = lon;
+
+        const coordsDisplay = document.getElementById('picked-coords-display');
+        document.getElementById('picked-coords-text').textContent = `Lon: ${lon}, Lat: ${lat}`;
+        coordsDisplay.style.display = 'block';
+
+        if (pickerMarker) pickerMap.removeLayer(pickerMarker);
+        pickerMarker = L.marker([lat, lon]).addTo(pickerMap)
+          .bindPopup(`<b>Lokasi Dipilih</b><br>Lon: ${lon}<br>Lat: ${lat}`)
+          .openPopup();
+      });
+    }
+
+    // ======== DATA & FILTER ========
+    let allHaltes = [];
+    let adminKoridorFilter = 'all';
+
+    async function loadHaltes() {
+      try {
+        const res = await fetch('/api/haltes');
+        const data = await res.json();
+        allHaltes = data.features || [];
+        applyFilter();
+      } catch(e) {
+        console.error(e);
+        document.getElementById('halte-table-body').innerHTML =
+          `<tr><td colspan="5"><div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><p>Gagal memuat data</p></div></td></tr>`;
+      }
+    }
+
+    function applyFilter() {
+      const q = document.getElementById('admin-search').value.toLowerCase().trim();
+      const filtered = allHaltes.filter(f => {
+        const props = f.properties;
+        const matchK = adminKoridorFilter === 'all' || props.koridor === adminKoridorFilter;
+        const matchQ = !q || props.nama_halte.toLowerCase().includes(q);
+        return matchK && matchQ;
+      });
+      renderTable(filtered);
+    }
+
+    function setAdminKoridor(k, btn) {
+      adminKoridorFilter = k;
+      document.querySelectorAll('.koridor-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyFilter();
+    }
+
+    function renderTable(features) {
+      const tbody = document.getElementById('halte-table-body');
+      const countEl = document.getElementById('halte-count');
+      countEl.textContent = `${features.length} halte`;
+
+      if (features.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><i class="fa-solid fa-magnifying-glass"></i><p><strong>Tidak ada halte ditemukan</strong></p><p style="font-size:13px;">Coba ubah filter atau kata kunci pencarian</p></div></td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = '';
+      features.forEach(feature => {
+        const props = feature.properties;
+        const coords = feature.geometry.coordinates;
+        const kClass = (props.koridor === 'K5') ? 'k5' : 'k6';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="cell-id">#${props.id}</span></td>
+          <td><span class="cell-name">${props.nama_halte}</span></td>
+          <td><span class="badge-koridor ${kClass}"><i class="fa-solid fa-bus" style="font-size:10px;"></i> ${props.koridor}</span></td>
+          <td><span class="cell-coords">${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}</span></td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-action btn-edit" title="Edit" onclick='editHalte(${JSON.stringify(feature)})'>
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button class="btn-action btn-del" title="Hapus" onclick="deleteHalte(${props.id})">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openModal() {
+      document.getElementById('halte-form').reset();
+      document.getElementById('halte-id').value = '';
+      document.getElementById('modal-title').textContent = 'Tambah Halte Baru';
+      document.getElementById('picked-coords-display').style.display = 'none';
+      if (pickerMarker && pickerMap) { pickerMap.removeLayer(pickerMarker); pickerMarker = null; }
+      document.getElementById('halte-modal').classList.add('active');
+      // Init map setelah modal visible
+      setTimeout(() => initPickerMap(), 50);
+    }
+
+    function closeModal() {
+      document.getElementById('halte-modal').classList.remove('active');
+    }
+
+    function handleOverlayClick(e) {
+      if (e.target === document.getElementById('halte-modal')) closeModal();
+    }
+
+    function editHalte(feature) {
+      const props = feature.properties;
+      const coords = feature.geometry.coordinates;
+      document.getElementById('halte-id').value = props.id;
+      document.getElementById('nama_halte').value = props.nama_halte;
+      document.getElementById('koridor').value = props.koridor;
+      document.getElementById('lon').value = coords[0];
+      document.getElementById('lat').value = coords[1];
+      document.getElementById('modal-title').textContent = 'Edit Data Halte';
+      document.getElementById('picked-coords-display').style.display = 'none';
+      document.getElementById('halte-modal').classList.add('active');
+      // Init map dan pasang marker di lokasi halte lama
+      setTimeout(() => {
+        initPickerMap();
+        pickerMap.setView([coords[1], coords[0]], 16);
+        if (pickerMarker) pickerMap.removeLayer(pickerMarker);
+        pickerMarker = L.marker([coords[1], coords[0]]).addTo(pickerMap)
+          .bindPopup(`<b>${props.nama_halte}</b><br>Lokasi saat ini`).openPopup();
+        const coordsDisplay = document.getElementById('picked-coords-display');
+        document.getElementById('picked-coords-text').textContent = `Lon: ${coords[0].toFixed(6)}, Lat: ${coords[1].toFixed(6)}`;
+        coordsDisplay.style.display = 'block';
+      }, 50);
+    }
+
+    // ======== TOAST & CONFIRM ========
+    let toastTimeout;
+    function showToast(message, type = 'error') {
+      const toast = document.getElementById('glass-toast');
+      const text = document.getElementById('glass-toast-text');
+      const icon = toast.querySelector('i');
+      
+      text.innerHTML = message;
+      toast.className = `glass-toast show ${type}`;
+      
+      if (type === 'error') {
+        icon.className = 'fa-solid fa-circle-exclamation';
+      } else if (type === 'success') {
+        icon.className = 'fa-solid fa-circle-check';
+      }
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3500);
+    }
+
+    function showConfirm(message, onConfirm) {
+      document.getElementById('glass-confirm-text').innerHTML = message;
+      document.getElementById('glass-confirm').classList.add('active');
+      const okBtn = document.getElementById('btn-confirm-ok');
+      okBtn.onclick = () => {
+        closeConfirm();
+        onConfirm();
+      };
+    }
+
+    function closeConfirm() {
+      document.getElementById('glass-confirm').classList.remove('active');
+    }
+
+    async function deleteHalte(id) {
+      showConfirm('Yakin ingin menghapus halte ini secara permanen?', async () => {
+        try {
+          const res = await fetch('/api/haltes/' + id, { method: 'DELETE', headers: authHeaders() });
+          if (res.status === 401 || res.status === 403) { logout(); return; }
+          if (res.ok) {
+            showToast('Halte berhasil dihapus', 'success');
+            loadHaltes();
+          }
+          else showToast('Gagal menghapus halte');
+        } catch(e) { console.error(e); }
+      });
+    }
+
+    // Sinkronkan input manual lon/lat ke marker di peta
+    ['lon', 'lat'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        const lon = parseFloat(document.getElementById('lon').value);
+        const lat = parseFloat(document.getElementById('lat').value);
+        if (!isNaN(lon) && !isNaN(lat) && pickerMap) {
+          pickerMap.setView([lat, lon], 16);
+          if (pickerMarker) pickerMap.removeLayer(pickerMarker);
+          pickerMarker = L.marker([lat, lon]).addTo(pickerMap);
+          const coordsDisplay = document.getElementById('picked-coords-display');
+          document.getElementById('picked-coords-text').textContent = `Lon: ${lon.toFixed(6)}, Lat: ${lat.toFixed(6)}`;
+          coordsDisplay.style.display = 'block';
+        }
+      });
+    });
+
+    document.getElementById('halte-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('halte-id').value;
+      const lon = parseFloat(document.getElementById('lon').value);
+      const lat = parseFloat(document.getElementById('lat').value);
+
+      // Validasi Bounding Box Padang di frontend
+      if (lon < 99.8 || lon > 100.7 || lat < -1.3 || lat > -0.5) {
+        showToast('Titik koordinat yang Anda masukkan berada di luar jangkauan wilayah layanan Trans Padang.');
+        return;
+      }
+
+      const payload = {
+        nama_halte: document.getElementById('nama_halte').value,
+        koridor: document.getElementById('koridor').value,
+        lon: lon,
+        lat: lat,
+      };
+      try {
+        const res = await fetch(id ? '/api/haltes/' + id : '/api/haltes', {
+          method: id ? 'PUT' : 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        if (res.status === 401 || res.status === 403) { logout(); return; }
+        if (res.ok) { 
+          closeModal(); 
+          loadHaltes(); 
+          showToast('Data halte berhasil disimpan', 'success');
+        }
+        else { const err = await res.json(); showToast(err.error || 'Gagal menyimpan'); }
+      } catch(e) { console.error(e); }
+    });
+
+    loadHaltes();
+  </script>
+</body>
+</html>

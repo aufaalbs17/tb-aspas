@@ -23,6 +23,11 @@ window.toggleZenMode = function() {
   }
 };
 
+window.toggleHalteList = function() {
+  const panel = document.getElementById('halte-list-panel');
+  if (panel) panel.classList.toggle('active');
+};
+
 window.showDynamicIsland = function(msg) {
   const island = document.getElementById('dynamic-island');
   island.innerText = msg;
@@ -58,8 +63,12 @@ window.closeTeam = function() {
 const map = L.map('map', {
   center: [-0.9471, 100.3658],
   zoom: 13,
+  zoomControl: false,
   layers: [cartoLightLayer]
 });
+
+// Pindahkan Zoom Control ke kanan atas agar tidak tertutup search bar
+L.control.zoom({ position: 'topright' }).addTo(map);
 
 // Layer Control
 const baseMaps = {
@@ -212,15 +221,26 @@ map.on('contextmenu', function(e) {
   const lat = e.latlng.lat;
   const lon = e.latlng.lng;
   
-  const popupContent = `
-    <div style="text-align: center; min-width: 140px;">
-      <p style="margin: 0 0 10px 0; font-weight: 600; font-size: 13px;">Atur Lokasi Ini Sebagai:</p>
-      <button onclick="setMarkerFromMap('start', ${lat}, ${lon})" style="width: 100%; padding: 8px; margin-bottom: 5px; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;"><i class="fa-solid fa-circle-dot"></i> Titik Awal</button>
-      <button onclick="setMarkerFromMap('end', ${lat}, ${lon})" style="width: 100%; padding: 8px; background: var(--danger-color); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;"><i class="fa-solid fa-location-dot"></i> Tujuan</button>
+  // Cek apakah titik awal sudah ada
+  const startLat = document.getElementById('start-coords').dataset.lat;
+  const hasStart = startLat && startLat !== '';
+
+  let popupContent = `
+    <div style="text-align: center; min-width: 150px; padding-top: 10px;">
+      <p style="margin: 0 0 12px 0; font-weight: 800; font-size: 13px; color: var(--text-main); padding-right: 20px;"><i class="fa-solid fa-crosshairs" style="color:var(--text-muted); margin-right:4px;"></i> Atur Lokasi Ini Sebagai:</p>
+      <button onclick="setMarkerFromMap('start', ${lat}, ${lon})" class="popup-btn-glass"><i class="fa-solid fa-circle-dot"></i> Titik Awal</button>
+  `;
+  
+  if (hasStart) {
+    popupContent += `<button onclick="setMarkerFromMap('transit', ${lat}, ${lon})" class="popup-btn-glass warning"><i class="fa-solid fa-location-dot"></i> Titik Transit</button>`;
+  }
+
+  popupContent += `
+      <button onclick="setMarkerFromMap('end', ${lat}, ${lon})" class="popup-btn-glass danger"><i class="fa-solid fa-flag-checkered"></i> Tujuan</button>
     </div>
   `;
   
-  L.popup()
+  L.popup({ className: 'glass-popup' })
     .setLatLng(e.latlng)
     .setContent(popupContent)
     .openOn(map);
@@ -231,6 +251,26 @@ map.on('contextmenu', function(e) {
 
 window.setMarkerFromMap = async function(type, lat, lon) {
   map.closePopup();
+  
+  // Jika sedang dalam Zen Mode, otomatis matikan agar panel terlihat
+  if (document.body.classList.contains('zen-mode')) {
+    toggleZenMode();
+  }
+
+  // Jika panel Omnibox (Cari Rute) sedang di-minimize (collapse), buka otomatis
+  const routingBody = document.getElementById('routing-form-body');
+  const omniboxIcon = document.getElementById('omnibox-icon');
+  if (routingBody && routingBody.style.display === 'none') {
+    routingBody.style.display = 'flex';
+    if (omniboxIcon) omniboxIcon.style.transform = 'rotate(180deg)';
+  }
+
+  // Jika set transit, pastikan form input transit terbuka
+  if (type === 'transit') {
+    document.getElementById('transit-group').style.display = 'block';
+    document.getElementById('btn-add-transit').style.display = 'none';
+  }
+
   document.getElementById(type + '-input').value = "Mengambil alamat...";
   const label = await reverseGeocode(lat, lon, "Titik Peta Dipilih");
   setMarker(type, lat, lon, label);
@@ -319,17 +359,24 @@ function setupAutocomplete(inputId, resultsId, type) {
     }
 
     searchTimeout = setTimeout(() => {
-      // Menambahkan 'Padang, Sumatera Barat' untuk memastikan hasil relevan
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' Padang Sumatera Barat')}&limit=5`)
+      // Query selalu ditambahkan konteks "Padang Sumatera Barat"
+      // agar hasil pencarian selalu relevan dengan wilayah layanan Trans Padang
+      const boundedQuery = query + ' Padang Sumatera Barat';
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(boundedQuery)}&limit=5`)
         .then(response => response.json())
         .then(data => {
           results.innerHTML = '';
           if (data.length > 0) {
             results.style.display = 'block';
+            // Label info wilayah
+            const areaLabel = document.createElement('div');
+            areaLabel.style = "padding: 6px 14px; font-size: 11px; color: #64748b; background: rgba(0,122,255,0.04); border-bottom: 1px solid rgba(0,0,0,0.05);";
+            areaLabel.innerHTML = '<i class="fa-solid fa-location-crosshairs" style="color:#007AFF;"></i> Hasil di wilayah Padang';
+            results.appendChild(areaLabel);
+
             data.forEach(item => {
               const div = document.createElement('div');
               div.className = 'search-item';
-              // Parse nama pendek
               const shortName = item.display_name.split(',')[0] + ', ' + item.display_name.split(',')[1];
               div.innerHTML = `<i class="fa-solid fa-map-pin"></i> <span>${shortName}</span>`;
               div.onclick = () => {
@@ -340,8 +387,17 @@ function setupAutocomplete(inputId, resultsId, type) {
               results.appendChild(div);
             });
           } else {
-            results.innerHTML = '<div class="search-item">Tidak ditemukan</div>';
+            results.style.display = 'block';
+            results.innerHTML = `
+              <div style="padding: 14px 16px; text-align: center; color: #64748b;">
+                <i class="fa-solid fa-triangle-exclamation" style="color:#f59e0b; margin-bottom:6px; display:block; font-size:18px;"></i>
+                <span style="font-size:13px; font-weight:600; display:block;">Lokasi tidak ditemukan</span>
+                <span style="font-size:12px; display:block; margin-top:3px; color:#94a3b8;">Pencarian dibatasi di wilayah <b>Kota Padang</b>.<br>Coba klik kanan di peta untuk memilih titik.</span>
+              </div>`;
           }
+        }).catch(() => {
+          results.innerHTML = `<div class="search-item" style="color:#ef4444;"><i class="fa-solid fa-wifi" style="margin-right:6px;"></i>Gagal menghubungi layanan pencarian</div>`;
+          results.style.display = 'block';
         });
     }, 500); // debounce 500ms
   });
@@ -404,8 +460,31 @@ async function getRoute() {
   // Ambil mode transportasi
   const mode = document.querySelector('input[name="travel_mode"]:checked').value;
   
+  // ======== TOAST & NOTIFICATION ========
+  let toastTimeout;
+  window.showToast = function(message, type = 'error') {
+    const toast = document.getElementById('glass-toast');
+    if (!toast) return;
+    const text = document.getElementById('glass-toast-text');
+    const icon = toast.querySelector('i');
+    
+    text.innerHTML = message;
+    toast.className = `glass-toast show ${type}`;
+    
+    if (type === 'error') {
+      icon.className = 'fa-solid fa-circle-exclamation';
+    } else if (type === 'success') {
+      icon.className = 'fa-solid fa-circle-check';
+    }
+
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3500);
+  };
+
   if(isNaN(startLon) || isNaN(startLat) || isNaN(endLon) || isNaN(endLat)) {
-    alert('Silakan tentukan Lokasi Awal dan Tujuan terlebih dahulu.');
+    showToast('Silakan tentukan Lokasi Awal dan Tujuan terlebih dahulu.');
     return;
   }
 
@@ -413,7 +492,7 @@ async function getRoute() {
   function validateLocation(lat, lon, label) {
     // Batas Kasar Kota Padang
     if (lat > -0.70 || lat < -1.10 || lon > 100.55 || lon < 100.20) {
-      alert('Maaf, ' + label + ' berada di luar area Kota Padang. Sistem hanya melayani rute di Padang saja.');
+      showToast('Titik yang Anda masukkan berada di luar jangkauan wilayah layanan Trans Padang.');
       return false;
     }
     return true;
@@ -591,7 +670,7 @@ async function getRoute() {
 
   } catch (error) {
     console.error('Routing Error:', error);
-    alert(error.message || 'Terjadi kesalahan saat mencari rute.');
+    showToast(error.message || 'Terjadi kesalahan saat mencari rute.');
     
     // Restore button state on error
     const btnErr = document.getElementById('btn-route');
@@ -661,9 +740,76 @@ window.setEndFromHalte = function(lat, lon, name) {
   if (document.getElementById('start-coords').dataset.lon) getRoute();
   map.closePopup();
 };
+let halteMarkersMap = {};
+let allHalteFeatures = []; // simpan semua data halte untuk filter
+let activeKoridorFilter = 'all';
 
+// Render ulang list berdasarkan filter aktif
+function renderHalteList(features) {
+  const listContainer = document.getElementById('halte-list-container');
+  if (!listContainer) return;
 
+  const searchQuery = (document.getElementById('halte-search-input')?.value || '').toLowerCase().trim();
 
+  const filtered = features.filter(feature => {
+    const props = feature.properties;
+    const matchKoridor = activeKoridorFilter === 'all' || props.koridor === activeKoridorFilter;
+    const matchSearch = !searchQuery || props.nama_halte.toLowerCase().includes(searchQuery);
+    return matchKoridor && matchSearch;
+  });
+
+  listContainer.innerHTML = '';
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = `
+      <div class="halte-empty">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <p><strong>Halte tidak ditemukan</strong></p>
+        <p style="font-size:12px;">Coba ubah kata kunci pencarian</p>
+      </div>`;
+    return;
+  }
+
+  filtered.forEach(feature => {
+    const props = feature.properties;
+    const layer = halteMarkersMap[props.id];
+    if (!layer) return;
+
+    const lat = layer.getLatLng().lat;
+    const lon = layer.getLatLng().lng;
+    const iconClass = (props.koridor === 'K5') ? 'k5' : 'k6';
+
+    const item = document.createElement('div');
+    item.className = 'halte-item';
+    item.innerHTML = `
+      <div class="halte-item-icon ${iconClass}"><i class="fa-solid fa-bus"></i></div>
+      <div class="halte-item-text">
+        <div class="halte-item-title">${props.nama_halte}</div>
+        <div class="halte-item-desc"><i class="fa-solid fa-road" style="font-size:10px;"></i> ${props.koridor}</div>
+      </div>
+      <i class="fa-solid fa-chevron-right halte-item-arrow"></i>
+    `;
+    item.onclick = () => {
+      map.flyTo([lat, lon], 17, { animate: true, duration: 1.5 });
+      setTimeout(() => layer.openPopup(), 1000);
+      if (window.innerWidth < 768) toggleHalteList();
+    };
+    listContainer.appendChild(item);
+  });
+}
+
+// Filter berdasarkan search input
+window.filterHalteList = function() {
+  renderHalteList(allHalteFeatures);
+};
+
+// Filter berdasarkan koridor button
+window.setKoridorFilter = function(koridor, btn) {
+  activeKoridorFilter = koridor;
+  document.querySelectorAll('.koridor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHalteList(allHalteFeatures);
+};
 
 // Fungsi menampilkan semua Halte di awal
 async function loadHaltes() {
@@ -671,6 +817,8 @@ async function loadHaltes() {
     const res = await fetch('/api/haltes');
     if (res.ok) {
       const geojson = await res.json();
+      allHalteFeatures = geojson.features || [];
+      
       L.geoJSON(geojson, {
         pointToLayer: function(feature, latlng) {
           const halteIcon = L.divIcon({ 
@@ -686,26 +834,39 @@ async function loadHaltes() {
           const lat = layer.getLatLng().lat;
           const lon = layer.getLatLng().lng;
           
+          halteMarkersMap[props.id] = layer;
+
           const popupContent = `
             <div style="text-align:center; min-width:160px;">
               <h3 style="margin:0 0 5px 0; font-size:14px; color:var(--text-main);">${props.nama_halte}</h3>
               <p style="margin:0 0 10px 0; font-size:12px; color:#666;">Koridor ${props.koridor}</p>
               
               <div style="display:flex; flex-direction:column; gap:5px; margin-bottom: 8px;">
-                <button onclick="setStartFromHalte(${lat}, ${lon}, '${props.nama_halte}')" style="background:#2563eb; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer;"><i class="fa-solid fa-location-dot"></i> Set Awal</button>
-                <button onclick="setEndFromHalte(${lat}, ${lon}, '${props.nama_halte}')" style="background:#dc2626; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer;"><i class="fa-solid fa-flag-checkered"></i> Set Tujuan</button>
+                <button onclick="setStartFromHalte(${lat}, ${lon}, '${props.nama_halte.replace(/'/g, "\\'")}')"
+                  style="background:#2563eb; color:white; border:none; padding:8px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600;">
+                  <i class="fa-solid fa-location-dot"></i> Set Titik Awal
+                </button>
+                <button onclick="setEndFromHalte(${lat}, ${lon}, '${props.nama_halte.replace(/'/g, "\\'")}')"
+                  style="background:#dc2626; color:white; border:none; padding:8px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600;">
+                  <i class="fa-solid fa-flag-checkered"></i> Set Tujuan
+                </button>
               </div>
             </div>
           `;
           layer.bindPopup(popupContent);
-          
-          // Tambahkan Tooltip untuk hover info
           layer.bindTooltip(`<b>${props.nama_halte}</b><br>Koridor ${props.koridor}`);
         }
       }).addTo(map);
+
+      // Render list setelah semua marker sudah dibuat
+      renderHalteList(allHalteFeatures);
     }
   } catch(e) {
     console.error('Gagal memuat halte', e);
+    const listContainer = document.getElementById('halte-list-container');
+    if (listContainer) {
+      listContainer.innerHTML = `<div class="halte-empty"><i class="fa-solid fa-triangle-exclamation"></i><p>Gagal memuat data halte</p></div>`;
+    }
   }
 }
 

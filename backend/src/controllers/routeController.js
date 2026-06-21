@@ -1,5 +1,11 @@
 const routingService = require('../services/routingService');
 
+// Validasi Bounding Box Kota Padang dan sekitarnya (Lon: 99.8 - 100.7, Lat: -1.3 - -0.5)
+const PADANG_BOUNDS = { minLon: 99.8, maxLon: 100.7, minLat: -1.3, maxLat: -0.5 };
+const isInBounds = (lon, lat) =>
+  lon >= PADANG_BOUNDS.minLon && lon <= PADANG_BOUNDS.maxLon &&
+  lat >= PADANG_BOUNDS.minLat && lat <= PADANG_BOUNDS.maxLat;
+
 // Helper untuk fetch OSRM
 async function fetchOSRMRoute(lon1, lat1, lon2, lat2, profile) {
   try {
@@ -67,6 +73,10 @@ exports.getInteractiveRoute = async (req, res) => {
       return res.status(400).json({ error: 'Koordinat awal dan tujuan harus diisi' });
     }
 
+    if (!isInBounds(startLon, startLat) || !isInBounds(endLon, endLat)) {
+      return res.status(400).json({ error: 'Titik awal atau tujuan berada di luar wilayah layanan Trans Padang.' });
+    }
+
     const travelMode = mode || 'walk'; 
     const osrmProfile = travelMode === 'walk' ? 'foot' : 'driving';
 
@@ -82,9 +92,9 @@ exports.getInteractiveRoute = async (req, res) => {
     const directDist = directRoute ? directRoute.distance : 999999;
     const directTime = directRoute ? directRoute.duration : 9999;
 
-    // 2. Evaluasi rute Koridor 5 dan 6
-    const routeK5 = await evaluateCorridor('5', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
-    const routeK6 = await evaluateCorridor('6', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
+    // 2. Evaluasi rute Koridor K5 dan K6 (sesuai nilai di database)
+    const routeK5 = await evaluateCorridor('K5', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
+    const routeK6 = await evaluateCorridor('K6', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
 
     // Kumpulkan opsi rute yang valid
     const options = [];
@@ -182,5 +192,51 @@ exports.getHaltes = async (req, res) => {
     res.json(geojson);
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengambil data halte' });
+  }
+};
+
+exports.createHalte = async (req, res) => {
+  try {
+    const { nama_halte, koridor, lon, lat } = req.body;
+    if (!nama_halte || !koridor || !lon || !lat) {
+      return res.status(400).json({ error: 'Semua field (nama_halte, koridor, lon, lat) harus diisi' });
+    }
+    if (!isInBounds(lon, lat)) {
+      return res.status(400).json({ error: 'Koordinat halte berada di luar wilayah layanan Trans Padang.' });
+    }
+    const newHalte = await routingService.createHalte(nama_halte, koridor, lon, lat);
+    res.status(201).json(newHalte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Gagal menambahkan halte' });
+  }
+};
+
+exports.updateHalte = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nama_halte, koridor, lon, lat } = req.body;
+    if (!nama_halte || !koridor || !lon || !lat) {
+      return res.status(400).json({ error: 'Semua field (nama_halte, koridor, lon, lat) harus diisi' });
+    }
+    if (!isInBounds(lon, lat)) {
+      return res.status(400).json({ error: 'Koordinat halte berada di luar wilayah layanan Trans Padang.' });
+    }
+    const updatedHalte = await routingService.updateHalte(id, nama_halte, koridor, lon, lat);
+    res.json(updatedHalte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Gagal mengupdate halte' });
+  }
+};
+
+exports.deleteHalte = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await routingService.deleteHalte(id);
+    res.json({ message: 'Halte berhasil dihapus' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Gagal menghapus halte' });
   }
 };

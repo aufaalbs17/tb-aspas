@@ -1,6 +1,7 @@
 const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 async function runSetup() {
   // Gunakan kredensial default, nanti kita sesuaikan jika gagal

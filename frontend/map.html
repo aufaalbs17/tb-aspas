@@ -98,11 +98,17 @@
       
       <div style="display: flex; gap: 10px;">
         <button onclick="getRoute()" class="btn-primary" id="btn-route" style="flex: 1;">
-          <i class="fa-solid fa-route"></i> Cari Rute
+          <i class="fa-solid fa-route"></i> Cari Rute Terbaik
         </button>
-        <button onclick="resetRoute()" class="btn-secondary" id="btn-reset" title="Bersihkan Peta">
+        <button onclick="resetRoute()" class="btn-secondary" id="btn-reset" title="Hapus Rute">
           <i class="fa-solid fa-trash-can"></i>
         </button>
+      </div>
+
+      <!-- Hint untuk pick di peta -->
+      <div style="margin-top: 12px; padding: 10px; background: rgba(0,122,255,0.06); border-radius: 12px; border: 1px dashed rgba(0,122,255,0.3); font-size: 11px; color: var(--text-muted); display: flex; align-items: flex-start; gap: 8px;">
+        <i class="fa-solid fa-lightbulb" style="color: #f59e0b; margin-top: 2px;"></i>
+        <span><b>Tips:</b> Klik kanan atau tahan pada area manapun di peta untuk langsung mengatur Titik Awal atau Tujuan.</span>
       </div>
 
     </div>
@@ -140,24 +146,384 @@
     </div>
   </div>
 
+  <style>
+    /* ======== LEAFLET POPUP GLASSMORPHISM ======== */
+    .leaflet-popup-content-wrapper {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(25px) saturate(200%);
+      -webkit-backdrop-filter: blur(25px) saturate(200%);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 20px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+      color: var(--text-main);
+      padding: 6px;
+    }
+    .leaflet-popup-tip-container {
+      display: none; /* Hilangkan panah kaku bawah */
+    }
+    .leaflet-popup-content {
+      margin: 10px 14px;
+      line-height: 1.4;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+    .leaflet-container a.leaflet-popup-close-button {
+      color: var(--text-muted);
+      top: 10px; right: 10px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.05);
+      display: flex; justify-content: center; align-items: center;
+      transition: 0.2s;
+    }
+    .leaflet-container a.leaflet-popup-close-button:hover {
+      color: var(--danger-color);
+      background: rgba(0,0,0,0.1);
+      transform: scale(1.1);
+    }
+    .popup-btn-glass {
+      width: 100%; padding: 10px; margin-bottom: 8px;
+      background: rgba(0,122,255,0.1);
+      color: var(--primary-color);
+      border: 1px solid rgba(0,122,255,0.2);
+      border-radius: 12px;
+      cursor: pointer; font-size: 13px; font-weight: 700;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .popup-btn-glass:hover {
+      background: var(--primary-color);
+      color: white; transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,122,255,0.3);
+    }
+    .popup-btn-glass.danger {
+      background: rgba(239,68,68,0.1); color: var(--danger-color); border-color: rgba(239,68,68,0.2);
+    }
+    .popup-btn-glass.danger:hover {
+      background: var(--danger-color); color: white; box-shadow: 0 4px 12px rgba(239,68,68,0.3);
+    }
+    .popup-btn-glass.warning {
+      background: rgba(245,158,11,0.1); color: #d97706; border-color: rgba(245,158,11,0.2);
+    }
+    .popup-btn-glass.warning:hover {
+      background: #f59e0b; color: white; box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+    }
+
+    /* ======== HALTE PANEL GLASSMORPHISM ======== */
+    .halte-list-panel {
+      position: absolute;
+      top: 20px;
+      bottom: 20px;
+      right: 20px;
+      width: 360px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+      z-index: 1001;
+      display: flex;
+      flex-direction: column;
+      /* Animation properties */
+      opacity: 0;
+      transform: translateX(30px) scale(0.95);
+      pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .halte-list-panel.active {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .halte-list-header {
+      padding: 22px 24px 18px;
+      background: transparent;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .halte-list-header h3 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--primary-color);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .halte-list-header .close-btn {
+      background: rgba(0,0,0,0.06);
+      border: none;
+      color: var(--text-main);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      padding: 0;
+    }
+    .halte-list-header .close-btn:hover {
+      background: rgba(0,0,0,0.12);
+      color: var(--danger-color);
+      transform: scale(1.1) rotate(90deg);
+    }
+
+    /* Search Box di dalam panel */
+    .halte-search-box {
+      padding: 14px 20px;
+      background: transparent;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      flex-shrink: 0;
+    }
+    .halte-search-box .search-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .halte-search-box .search-icon {
+      position: absolute;
+      left: 14px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .halte-search-box input {
+      width: 100%;
+      padding: 12px 14px 12px 40px;
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      color: var(--text-main);
+      box-sizing: border-box;
+      transition: all 0.2s;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .halte-search-box input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.12), inset 0 1px 2px rgba(0,0,0,0.02);
+    }
+    
+    /* Koridor Filter Tabs */
+    .koridor-filter {
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px;
+      background: transparent;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      flex-shrink: 0;
+    }
+    .koridor-btn {
+      flex: 1;
+      padding: 7px 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,122,255,0.25);
+      background: rgba(255,255,255,0.5);
+      backdrop-filter: blur(10px);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      text-align: center;
+    }
+    .koridor-btn.active {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+      box-shadow: 0 4px 12px rgba(0,122,255,0.3);
+    }
+    .koridor-btn:not(.active):hover {
+      background: rgba(0,122,255,0.1);
+    }
+
+    /* Halte List Container */
+    .halte-list-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,0,0,0.15) transparent;
+    }
+    .halte-list-container::-webkit-scrollbar { width: 5px; }
+    .halte-list-container::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.15);
+      border-radius: 10px;
+    }
+
+    /* Halte Item Cards - Glassmorphism */
+    .halte-item {
+      padding: 12px 14px;
+      margin-bottom: 7px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.45);
+      border: 1px solid rgba(255,255,255,0.75);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .halte-item:hover {
+      background: rgba(255,255,255,0.75);
+      border-color: rgba(0,122,255,0.25);
+      transform: translateX(-4px);
+      box-shadow: 0 6px 20px rgba(0,122,255,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+    }
+    .halte-item-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .halte-item-icon.k5 { background: rgba(234,179,8,0.15); color: #ca8a04; }
+    .halte-item-icon.k6 { background: rgba(59,130,246,0.12); color: #2563eb; }
+    .halte-item-text { flex: 1; min-width: 0; }
+    .halte-item-title {
+      font-weight: 600;
+      font-size: 13.5px;
+      color: var(--text-main);
+      margin: 0 0 2px 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .halte-item-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .halte-item-arrow {
+      color: rgba(0,0,0,0.2);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    /* Empty state */
+    .halte-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+    .halte-empty i {
+      font-size: 36px;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+    .halte-empty p { margin: 5px 0; font-size: 14px; }
+
+    /* ======== TOAST NOTIFICATION (GLASS) ======== */
+    .glass-toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      padding: 14px 24px;
+      border-radius: 50px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      z-index: 9999;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      pointer-events: none;
+    }
+    .glass-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .glass-toast.error i { color: #ef4444; }
+    .glass-toast.success i { color: #10b981; }
+  </style>
+
+  <!-- Panel Daftar Halte - Glassmorphism Off-Canvas -->
+  <div id="halte-list-panel" class="halte-list-panel">
+    <!-- Header -->
+    <div class="halte-list-header">
+      <h3><i class="fa-solid fa-bus"></i> Daftar Halte</h3>
+      <button class="close-btn" onclick="toggleHalteList()" title="Tutup Panel"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Search Box -->
+    <div class="halte-search-box">
+      <div class="search-wrapper">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input type="text" id="halte-search-input" placeholder="Cari nama halte..." autocomplete="off" oninput="filterHalteList()">
+      </div>
+    </div>
+
+    <!-- Filter Koridor -->
+    <div class="koridor-filter">
+      <button class="koridor-btn active" data-koridor="all" onclick="setKoridorFilter('all', this)">Semua Koridor</button>
+      <button class="koridor-btn" data-koridor="K5" onclick="setKoridorFilter('K5', this)">Koridor 5</button>
+      <button class="koridor-btn" data-koridor="K6" onclick="setKoridorFilter('K6', this)">Koridor 6</button>
+    </div>
+
+    <!-- Halte List -->
+    <div id="halte-list-container" class="halte-list-container">
+      <div class="halte-empty">
+        <i class="fa-solid fa-bus"></i>
+        <p>Memuat data halte...</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating Action Buttons (Bottom Right) -->
   <div style="position: absolute; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 15px; z-index: 1000;">
+    <!-- Admin FAB -->
+    <a href="/admin" title="Admin Panel" style="width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.5); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); color:#8b5cf6; border:1px solid rgba(255,255,255,0.8); box-shadow:0 10px 25px rgba(0,0,0,0.1); display:flex; justify-content:center; align-items:center; font-size:22px; text-decoration:none; transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);" onmouseover="this.style.transform='scale(1.15) rotate(15deg)'" onmouseout="this.style.transform=''">
+      <i class="fa-solid fa-shield-halved"></i>
+    </a>
+    <!-- Halte List FAB -->
+    <button class="fab-help" id="btn-halte-list" onclick="toggleHalteList()" title="Daftar Halte" style="color: var(--primary-color);">
+      <i class="fa-solid fa-list-ul"></i>
+    </button>
     <!-- Zen Mode FAB -->
     <button class="fab-zen" id="btn-zen" onclick="toggleZenMode()" title="Zen Mode (Sembunyikan UI)">
       <i class="fa-solid fa-expand"></i>
     </button>
   </div>
 
+  <!-- Toast Notification -->
+  <div id="glass-toast" class="glass-toast">
+    <i class="fa-solid fa-circle-exclamation"></i>
+    <span id="glass-toast-text">Peringatan</span>
+  </div>
 
-
-  <!-- Leaflet JS -->
+  <!-- Pustaka Leaflet & Routing -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <!-- Leaflet AntPath -->
   <script src="https://unpkg.com/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.js"></script>
   
   <!-- Custom JS dengan versi untuk memaksa cache refresh -->
-  <script src="public/js/map.js?v=29"></script>
+  <script src="public/js/map.js?v=39"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>
