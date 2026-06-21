@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trans Padang WebGIS (Koridor 5 & 6)</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="public/css/style.css?v=3" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+</head>
+<body>
+  
+  <!-- Dynamic Island -->
+  <div id="dynamic-island"></div>
+
+  <div id="map"></div>
+  
+  <div class="omnibox" id="omnibox">
+    <div class="omnibox-header" id="btn-collapse" title="Klik untuk Buka/Tutup Form">
+      <div class="omnibox-title-group">
+        <i class="fa-solid fa-search text-primary"></i>
+        <span id="omnibox-title">Cari Rute Trans Padang...</span>
+      </div>
+      <div>
+        <i class="fa-solid fa-chevron-down" id="omnibox-icon" style="color: var(--text-muted); transition: transform 0.3s;"></i>
+      </div>
+    </div>
+    
+    <div class="routing-form" id="routing-form-body" style="display: none; padding-top: 15px;">
+
+
+      <!-- Mode Selector -->
+      <div class="mode-selector">
+        <input type="radio" id="mode-walk" name="travel_mode" value="walk" checked>
+        <label for="mode-walk"><i class="fa-solid fa-person-walking"></i></label>
+        
+        <input type="radio" id="mode-motor" name="travel_mode" value="motor">
+        <label for="mode-motor"><i class="fa-solid fa-motorcycle"></i></label>
+        
+        <input type="radio" id="mode-car" name="travel_mode" value="car">
+        <label for="mode-car"><i class="fa-solid fa-car"></i></label>
+      </div>
+
+      <div class="form-group">
+        <!-- Input Awal -->
+        <div class="search-group" style="margin-bottom: 5px;">
+          <label style="font-size: 12px; margin-bottom: 2px; display: block;"><i class="fa-solid fa-circle-dot text-primary"></i> Titik Awal</label>
+          <div class="input-wrapper">
+            <input type="text" id="start-input" placeholder="Pilih Titik Awal..." autocomplete="off">
+            <button onclick="locateUser()" class="btn-icon" title="Gunakan GPS Saat Ini"><i class="fa-solid fa-crosshairs"></i></button>
+          </div>
+          <div id="start-results" class="search-results"></div>
+          <span id="start-coords" style="display:none;" data-lat="" data-lon=""></span>
+        </div>
+        
+        <!-- Tombol Tambah Transit & Swap -->
+        <div class="transit-controls">
+          <button id="btn-add-transit" class="btn-add-transit" onclick="toggleTransitInput(event)"><i class="fa-solid fa-plus"></i> Tambah Transit</button>
+          
+          <button onclick="swapRoute(event)" title="Tukar Arah Rute" class="btn-swap">
+            <i class="fa-solid fa-arrow-right-arrow-left" style="transform: rotate(90deg);"></i>
+          </button>
+        </div>
+
+        <!-- Input Transit (Sembunyi by default) -->
+        <div class="search-group" id="transit-group" style="display:none; margin-bottom: 10px;">
+          <label style="font-size: 12px; margin-bottom: 2px; display: block;"><i class="fa-solid fa-circle-dot" style="color: #f59e0b;"></i> Titik Transit</label>
+          <div class="input-wrapper">
+            <input type="text" id="transit-input" placeholder="Pilih Titik Transit..." autocomplete="off">
+            <button onclick="removeTransit(event)" class="btn-icon" title="Hapus Transit"><i class="fa-solid fa-times" style="color:#ef4444;"></i></button>
+          </div>
+          <div id="transit-results" class="search-results"></div>
+          <span id="transit-coords" style="display:none;" data-lat="" data-lon=""></span>
+        </div>
+
+        <!-- Input Tujuan -->
+        <div class="search-group">
+          <label style="font-size: 12px; margin-bottom: 2px; display: block;"><i class="fa-solid fa-location-dot text-danger"></i> Tujuan</label>
+          <div class="input-wrapper">
+            <input type="text" id="end-input" placeholder="Pilih Tujuan..." autocomplete="off">
+          </div>
+          <div id="end-results" class="search-results"></div>
+          <span id="end-coords" style="display:none;" data-lat="" data-lon=""></span>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 10px;">
+        <button onclick="getRoute()" class="btn-primary" id="btn-route" style="flex: 1;">
+          <i class="fa-solid fa-route"></i> Cari Rute
+        </button>
+        <button onclick="resetRoute()" class="btn-secondary" id="btn-reset" title="Bersihkan Peta">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Bottom Sheet untuk Hasil Rute -->
+  <div id="bottom-sheet" class="bottom-sheet">
+    <div class="bottom-sheet-drag"></div>
+    <div class="bottom-sheet-header" onclick="expandBottomSheet()" style="cursor: pointer;">
+      <h3 style="margin: 0; font-size: 16px; color: var(--text-main); font-weight: 600;"><i class="fa-solid fa-map"></i> Detail Rute</h3>
+      <button class="btn-close-sheet" onclick="closeBottomSheet(); event.stopPropagation();" title="Minimalkan Panel"><i class="fa-solid fa-chevron-down"></i></button>
+    </div>
+    
+    <div class="right-panel-summary">
+      <div class="summary-card">
+        <i class="fa-regular fa-clock" style="color:#2563eb; font-size:24px;"></i>
+        <div style="display:flex; flex-direction:column; align-items:center;">
+          <span style="font-size:11px; color:#64748b;">Estimasi Waktu</span>
+          <span id="rp-time" style="font-weight:bold; font-size:18px; color:var(--text-main);"></span>
+        </div>
+      </div>
+      <div class="summary-card">
+        <i class="fa-solid fa-route" style="color:#10b981; font-size:24px;"></i>
+        <div style="display:flex; flex-direction:column; align-items:center;">
+          <span style="font-size:11px; color:#64748b;">Total Jarak</span>
+          <span id="rp-dist" style="font-weight:bold; font-size:18px; color:var(--text-main);"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="right-panel-content">
+      <div class="timeline" id="rp-timeline">
+        <!-- Steps will be injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Action Buttons (Bottom Right) -->
+  <div style="position: absolute; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 15px; z-index: 1000;">
+    <!-- Zen Mode FAB -->
+    <button class="fab-zen" id="btn-zen" onclick="toggleZenMode()" title="Zen Mode (Sembunyikan UI)">
+      <i class="fa-solid fa-expand"></i>
+    </button>
+  </div>
+
+
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Leaflet AntPath -->
+  <script src="https://unpkg.com/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.js"></script>
+  
+  <!-- Custom JS dengan versi untuk memaksa cache refresh -->
+  <script src="public/js/map.js?v=29"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(registration => console.log('ServiceWorker registered'))
+          .catch(err => console.error('ServiceWorker registration failed: ', err));
+      });
+    }
+  </script>
+</body>
+</html>
