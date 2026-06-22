@@ -439,16 +439,7 @@ window.removeTransit = function(e) {
   }
 };
 
-// Auto-recalculate route when travel mode changes
-document.querySelectorAll('input[name="travel_mode"]').forEach(radio => {
-  radio.addEventListener('change', () => {
-    const startLon = document.getElementById('start-coords').dataset.lon;
-    const endLon = document.getElementById('end-coords').dataset.lon;
-    if (startLon && endLon) {
-      getRoute();
-    }
-  });
-});
+
 
 // Fungsi Memanggil API Routing ke Node.js Backend
 async function getRoute() {
@@ -457,8 +448,8 @@ async function getRoute() {
   const endLat = parseFloat(document.getElementById('end-coords').dataset.lat);
   const endLon = parseFloat(document.getElementById('end-coords').dataset.lon);
   
-  // Ambil mode transportasi
-  const mode = document.querySelector('input[name="travel_mode"]:checked').value;
+  // Ambil mode transportasi (hanya jalan kaki)
+  const mode = 'walk';
   
   // ======== TOAST & NOTIFICATION ========
   let toastTimeout;
@@ -578,8 +569,6 @@ async function getRoute() {
       
       switch(feature.properties.type) {
         case 'walk': color = "#6b7280"; isWalk = true; break;
-        case 'motor': color = "#16a34a"; break;
-        case 'car': color = "#ca8a04"; break;
         case 'bus': color = "#2563eb"; weight = 7; break;
       }
       
@@ -713,11 +702,16 @@ window.setStartFromHalte = function(lat, lon, name) {
   map.closePopup();
 };
 
-window.closeBottomSheet = function() {
+window.toggleBottomSheet = function() {
   if(navigator.vibrate) navigator.vibrate(10);
   const sheet = document.getElementById('bottom-sheet');
-  sheet.classList.remove('active');
-  sheet.classList.add('minimized');
+  if (sheet.classList.contains('minimized')) {
+    sheet.classList.remove('minimized');
+    sheet.classList.add('active');
+  } else if (sheet.classList.contains('active')) {
+    sheet.classList.remove('active');
+    sheet.classList.add('minimized');
+  }
 };
 
 window.expandBottomSheet = function() {

@@ -67,7 +67,7 @@ async function evaluateCorridor(koridor, startLon, startLat, endLon, endLat, osr
 
 exports.getInteractiveRoute = async (req, res) => {
   try {
-    const { startLon, startLat, endLon, endLat, mode } = req.body;
+    const { startLon, startLat, endLon, endLat } = req.body;
 
     if (!startLon || !startLat || !endLon || !endLat) {
       return res.status(400).json({ error: 'Koordinat awal dan tujuan harus diisi' });
@@ -77,13 +77,11 @@ exports.getInteractiveRoute = async (req, res) => {
       return res.status(400).json({ error: 'Titik awal atau tujuan berada di luar wilayah layanan Trans Padang.' });
     }
 
-    const travelMode = mode || 'walk'; 
+    const travelMode = 'walk'; 
     const osrmProfile = travelMode === 'walk' ? 'foot' : 'driving';
 
     const modeLabels = {
-      walk: { text: 'Jalan kaki', icon: 'fa-person-walking', endText: 'Jalan kaki' },
-      motor: { text: 'Naik Ojek/Motor', icon: 'fa-motorcycle', endText: 'Lanjut naik Ojek' },
-      car: { text: 'Naik Taksi/Mobil', icon: 'fa-car', endText: 'Lanjut naik Taksi' }
+      walk: { text: 'Jalan kaki', icon: 'fa-person-walking', endText: 'Jalan kaki' }
     };
     const legLabel = modeLabels[travelMode] || modeLabels.walk;
 
