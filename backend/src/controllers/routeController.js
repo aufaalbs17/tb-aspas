@@ -26,10 +26,34 @@ async function fetchOSRMRoute(lon1, lat1, lon2, lat2, profile) {
   return null;
 }
 
+// Helper untuk fetch OSRM dengan urutan banyak titik (waypoints)
+async function fetchOSRMRouteSequence(coords, profile) {
+  try {
+    const coordsString = coords.map(c => `${c[0]},${c[1]}`).join(';');
+    const url = `http://router.project-osrm.org/route/v1/${profile}/${coordsString}?geometries=geojson`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.routes && data.routes.length > 0) {
+      return {
+        geometry: data.routes[0].geometry,
+        distance: data.routes[0].distance,
+        duration: data.routes[0].duration / 60 // in minutes
+      };
+    }
+  } catch (e) {
+    console.error("OSRM Sequence Error:", e.message);
+  }
+  return null;
+}
+
 // Menghitung rute untuk satu koridor spesifik
 async function evaluateCorridor(koridor, startLon, startLat, endLon, endLat, osrmProfile, travelMode) {
-  const startHalte = await routingService.findNearestHalte(startLon, startLat, koridor);
-  const endHalte = await routingService.findNearestHalte(endLon, endLat, koridor);
+  const haltePair = await routingService.findOptimalHaltePair(startLon, startLat, endLon, endLat, koridor);
+  if (!haltePair) return null;
+  
+  const startHalte = haltePair.startHalte;
+  const endHalte = haltePair.endHalte;
   
   if (!startHalte || !endHalte) return null;
   if (startHalte.id === endHalte.id) return null; // Jika sama, abaikan rute bus ini
@@ -38,17 +62,33 @@ async function evaluateCorridor(koridor, startLon, startLat, endLon, endLat, osr
   const h2Coords = JSON.parse(endHalte.geometry).coordinates;
 
   const leg1 = await fetchOSRMRoute(startLon, startLat, h1Coords[0], h1Coords[1], osrmProfile);
-  const legBus = await fetchOSRMRoute(h1Coords[0], h1Coords[1], h2Coords[0], h2Coords[1], 'driving');
+  
+  // Ambil titik-titik halte di antara awal dan akhir sesuai urutan loop rute bus
+  let busCoordsSequence = await routingService.getHaltesSequence(koridor, startHalte.urutan_halte, endHalte.urutan_halte);
+
   const leg2 = await fetchOSRMRoute(h2Coords[0], h2Coords[1], endLon, endLat, osrmProfile);
 
+  // Estimasi kasar jarak dan waktu murni berdasarkan jumlah halte
+  const busStops = Math.abs(startHalte.urutan_halte - endHalte.urutan_halte) / 10;
+  const estimatedBusDist = Math.max(1, busStops) * 600; // 600 meter per halte
+  const estimatedBusTime = Math.max(1, busStops) * 2; // 2 menit per halte
+
+  // Paksa rute bus menjadi garis lurus antar halte (LineString) untuk menghindari OSRM muter-muter!
+  let legBus = {
+    geometry: { type: 'LineString', coordinates: busCoordsSequence },
+    properties: { koridor: koridor },
+    distance: estimatedBusDist,
+    duration: estimatedBusTime
+  };
+
   const walkDist1 = leg1 ? leg1.distance : (startHalte.jarak_meter || 0);
-  const busDist = legBus ? legBus.distance : 5000;
+  const busDist = legBus.distance;
   const walkDist2 = leg2 ? leg2.distance : (endHalte.jarak_meter || 0);
   
   const totalDist = walkDist1 + busDist + walkDist2;
   
   const walkTime1 = leg1 ? leg1.duration : (walkDist1 / (travelMode==='walk'?83:500));
-  const busTime = legBus ? legBus.duration : (busDist / 500);
+  const busTime = legBus.duration;
   const walkTime2 = leg2 ? leg2.duration : (walkDist2 / (travelMode==='walk'?83:500));
   const totalTime = walkTime1 + busTime + walkTime2;
 
@@ -63,6 +103,71 @@ async function evaluateCorridor(koridor, startLon, startLat, endLon, endLat, osr
     totalDist, totalTime,
     h1Coords, h2Coords
   };
+}
+
+
+async function evaluateTransitCorridor(k1, k2, startLon, startLat, endLon, endLat, osrmProfile, travelMode) {
+  try {
+    const transitPairs = await routingService.findTransitPairs(k1, k2, 500);
+    if (!transitPairs || transitPairs.length === 0) return null;
+
+    let bestTransitOpt = null;
+    let bestTransitScore = Infinity;
+
+    for (let pair of transitPairs) {
+      const t1 = pair.halte1;
+      const t2 = pair.halte2;
+      const t1Coords = JSON.parse(t1.geometry);
+      const t2Coords = JSON.parse(t2.geometry);
+
+      // K1 Leg
+      const legK1 = await evaluateCorridor(k1, startLon, startLat, t1Coords[0], t1Coords[1], osrmProfile, travelMode);
+      if (!legK1) continue;
+      // We must force the end halte of legK1 to be t1. evaluateCorridor will naturally pick t1 because its distance to t1 is 0.
+
+      // K2 Leg
+      const legK2 = await evaluateCorridor(k2, t2Coords[0], t2Coords[1], endLon, endLat, osrmProfile, travelMode);
+      if (!legK2) continue;
+      // Similarly, start halte of legK2 is naturally t2.
+
+      // Transit Walk
+      const transitWalk = await fetchOSRMRoute(t1Coords[0], t1Coords[1], t2Coords[0], t2Coords[1], 'foot');
+      const transitDist = transitWalk ? transitWalk.distance : pair.transitDist;
+      const transitWalkTime = transitWalk ? transitWalk.duration : (transitDist / 83);
+
+      const totalTime = legK1.totalTime + transitWalkTime + legK2.totalTime;
+      const totalDist = legK1.totalDist + transitDist + legK2.totalDist;
+
+      // Score: heavy penalty on walking
+      const walkTime1 = legK1.walkTime1;
+      const walkTime2 = legK2.walkTime2;
+      const totalWalkTime = walkTime1 + transitWalkTime + walkTime2;
+      const totalBusTime = legK1.busTime + legK2.busTime;
+
+      const score = (totalWalkTime * 10) + totalBusTime;
+
+      if (score < bestTransitScore) {
+        bestTransitScore = score;
+        bestTransitOpt = {
+          type: 'transit_route',
+          koridors: [k1, k2],
+          leg1: legK1,
+          leg2: legK2,
+          transitWalk: transitWalk,
+          transitWalkTime,
+          transitDist,
+          totalTime,
+          totalDist,
+          score,
+          t1, t2
+        };
+      }
+    }
+    return bestTransitOpt;
+  } catch(e) {
+    console.error(e);
+    return null;
+  }
 }
 
 exports.getInteractiveRoute = async (req, res) => {
@@ -88,37 +193,52 @@ exports.getInteractiveRoute = async (req, res) => {
     // 1. Cek rute langsung (Direct Route)
     const directRoute = await fetchOSRMRoute(startLon, startLat, endLon, endLat, osrmProfile);
     const directDist = directRoute ? directRoute.distance : 999999;
-    const directTime = directRoute ? directRoute.duration : 9999;
+    const directTime = directRoute ? (directDist / 83) : 9999;
 
     // 2. Evaluasi rute Koridor K5 dan K6 (sesuai nilai di database)
     const routeK5 = await evaluateCorridor('K5', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
     const routeK6 = await evaluateCorridor('K6', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
+
+    // 3. Evaluasi Transit K5 -> K6 dan K6 -> K5
+    const transitK5K6 = await evaluateTransitCorridor('K5', 'K6', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
+    const transitK6K5 = await evaluateTransitCorridor('K6', 'K5', startLon, startLat, endLon, endLat, osrmProfile, travelMode);
 
     // Kumpulkan opsi rute yang valid
     const options = [];
     if (directRoute) options.push({ type: 'direct', totalDist: directDist, totalTime: directTime, route: directRoute });
     if (routeK5) options.push(routeK5);
     if (routeK6) options.push(routeK6);
+    if (transitK5K6) options.push(transitK5K6);
+    if (transitK6K5) options.push(transitK6K5);
 
     if (options.length === 0) {
        return res.status(404).json({ error: 'Rute tidak dapat ditemukan.' });
     }
 
-    // Pilih yang terbaik: 
-    // Prioritaskan bus jika jarak A ke B cukup jauh (>1.5km), kecuali rute bus JAUH lebih muter.
+    // Orang sangat tidak suka jalan kaki jauh, jadi waktu jalan kaki diberi penalti 10x lipat.
+    options.forEach(opt => {
+        if (opt.type === 'direct') {
+            opt.score = opt.totalTime * 10;
+        } else {
+            opt.score = ((opt.walkTime1 + opt.walkTime2) * 10) + opt.busTime;
+        }
+    });
+
+    // Pilih rute dengan score terendah
     let bestOption = options[0];
     for (let opt of options) {
        if (opt.type === 'bus_route') {
-           // Bus route lebih disenangi jika rute langsung lebih dari 1.5km
-           // tapi total bus_route tidak boleh lebih dari 2x lipat rute langsung
-           if (directDist > 1500 && opt.totalDist < directDist * 2) {
-               if (bestOption.type === 'direct' || opt.totalDist < bestOption.totalDist) {
+           if (directDist > 1000 && opt.totalTime < directTime * 1.5) {
+               if (bestOption.type === 'direct' || opt.score < bestOption.score) {
+                   bestOption = opt;
+               }
+           } else {
+               if (opt.score < bestOption.score) {
                    bestOption = opt;
                }
            }
        } else if (opt.type === 'direct') {
-           if (directDist <= 1500) {
-               // Selalu paksa rute langsung jika jarak kurang dari 1.5km
+           if (directDist <= 1000 && opt.score < bestOption.score) {
                bestOption = opt;
            }
        }

@@ -373,9 +373,15 @@
         </div>
         <div class="form-group">
           <label>Koridor</label>
-          <select id="koridor" required>
+          <select id="koridor" required onchange="updatePosisiDropdown()">
             <option value="K5">Koridor 5 (K5)</option>
             <option value="K6">Koridor 6 (K6)</option>
+          </select>
+        </div>
+        <div class="form-group" id="posisi-group" style="display: none;">
+          <label>Letakkan Setelah Halte:</label>
+          <select id="posisi-halte">
+            <!-- Akan diisi via JS -->
           </select>
         </div>
 
@@ -554,11 +560,36 @@
       });
     }
 
+    function updatePosisiDropdown() {
+      const isEdit = document.getElementById('halte-id').value !== '';
+      if (isEdit) return; // Jangan tampilkan saat edit
+      
+      const koridor = document.getElementById('koridor').value;
+      const haltesKoridor = allHaltes.filter(f => f.properties.koridor === koridor);
+      
+      const group = document.getElementById('posisi-group');
+      const select = document.getElementById('posisi-halte');
+      
+      if (haltesKoridor.length >= 2) {
+        group.style.display = 'block';
+        let options = `<option value="first">Letakkan di awal</option>`;
+        haltesKoridor.forEach(h => {
+          options += `<option value="after_${h.properties.id}">Letakkan setelah: ${h.properties.nama_halte}</option>`;
+        });
+        options += `<option value="last" selected>Letakkan di akhir</option>`;
+        select.innerHTML = options;
+      } else {
+        group.style.display = 'none';
+        select.innerHTML = `<option value="last" selected>Letakkan di akhir</option>`;
+      }
+    }
+
     function openModal() {
       document.getElementById('halte-form').reset();
       document.getElementById('halte-id').value = '';
       document.getElementById('modal-title').textContent = 'Tambah Halte Baru';
       document.getElementById('picked-coords-display').style.display = 'none';
+      updatePosisiDropdown();
       if (pickerMarker && pickerMap) { pickerMap.removeLayer(pickerMarker); pickerMarker = null; }
       document.getElementById('halte-modal').classList.add('active');
       // Init map setelah modal visible
@@ -583,6 +614,7 @@
       document.getElementById('lat').value = coords[1];
       document.getElementById('modal-title').textContent = 'Edit Data Halte';
       document.getElementById('picked-coords-display').style.display = 'none';
+      document.getElementById('posisi-group').style.display = 'none';
       document.getElementById('halte-modal').classList.add('active');
       // Init map dan pasang marker di lokasi halte lama
       setTimeout(() => {
@@ -675,11 +707,17 @@
         return;
       }
 
+      let position = 'last';
+      if (!id && document.getElementById('posisi-group').style.display !== 'none') {
+        position = document.getElementById('posisi-halte').value;
+      }
+
       const payload = {
         nama_halte: document.getElementById('nama_halte').value,
         koridor: document.getElementById('koridor').value,
         lon: lon,
         lat: lat,
+        position: position
       };
       try {
         const res = await fetch(id ? '/api/haltes/' + id : '/api/haltes', {
