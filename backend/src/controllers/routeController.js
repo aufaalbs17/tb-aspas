@@ -117,8 +117,8 @@ async function evaluateTransitCorridor(k1, k2, startLon, startLat, endLon, endLa
     for (let pair of transitPairs) {
       const t1 = pair.halte1;
       const t2 = pair.halte2;
-      const t1Coords = JSON.parse(t1.geometry);
-      const t2Coords = JSON.parse(t2.geometry);
+      const t1Coords = JSON.parse(t1.geometry).coordinates;
+      const t2Coords = JSON.parse(t2.geometry).coordinates;
 
       // K1 Leg
       const legK1 = await evaluateCorridor(k1, startLon, startLat, t1Coords[0], t1Coords[1], osrmProfile, travelMode);
@@ -145,6 +145,7 @@ async function evaluateTransitCorridor(k1, k2, startLon, startLat, endLon, endLa
       const totalBusTime = legK1.busTime + legK2.busTime;
 
       const score = (totalWalkTime * 10) + totalBusTime;
+      console.log('Transit score for ' + k1 + '->' + k2 + ' (via ' + t1.nama_halte + '-' + t2.nama_halte + '):', score, 'walkTime1:', walkTime1, 'walkTime2:', walkTime2, 'transitWalk:', transitWalkTime);
 
       if (score < bestTransitScore) {
         bestTransitScore = score;
@@ -219,6 +220,8 @@ exports.getInteractiveRoute = async (req, res) => {
     options.forEach(opt => {
         if (opt.type === 'direct') {
             opt.score = opt.totalTime * 10;
+        } else if (opt.type === 'transit_route') {
+            // Score is already calculated and set in evaluateTransitCorridor
         } else {
             opt.score = ((opt.walkTime1 + opt.walkTime2) * 10) + opt.busTime;
         }
@@ -227,7 +230,7 @@ exports.getInteractiveRoute = async (req, res) => {
     // Pilih rute dengan score terendah
     let bestOption = options[0];
     for (let opt of options) {
-       if (opt.type === 'bus_route') {
+       if (opt.type === 'bus_route' || opt.type === 'transit_route') {
            if (directDist > 1000 && opt.totalTime < directTime * 1.5) {
                if (bestOption.type === 'direct' || opt.score < bestOption.score) {
                    bestOption = opt;
@@ -261,6 +264,37 @@ exports.getInteractiveRoute = async (req, res) => {
           geometry: directRoute.geometry
         }
       ];
+    } else if (bestOption.type === 'transit_route') {
+      const leg1 = bestOption.leg1;
+      const leg2 = bestOption.leg2;
+      
+      const t1Coords = JSON.parse(bestOption.t1.geometry).coordinates;
+      const t2Coords = JSON.parse(bestOption.t2.geometry).coordinates;
+      const leg1Geom = leg1.leg1 ? leg1.leg1.geometry : { type: 'LineString', coordinates: [[startLon, startLat], leg1.h1Coords] };
+      const legBus1Geom = leg1.legBus ? leg1.legBus.geometry : { type: 'LineString', coordinates: [leg1.h1Coords, t1Coords] };
+      const transitWalkGeom = bestOption.transitWalk ? bestOption.transitWalk.geometry : { type: 'LineString', coordinates: [t1Coords, t2Coords] };
+      const legBus2Geom = leg2.legBus ? leg2.legBus.geometry : { type: 'LineString', coordinates: [t2Coords, leg2.h2Coords] };
+      const leg2Geom = leg2.leg2 ? leg2.leg2.geometry : { type: 'LineString', coordinates: [leg2.h2Coords, [endLon, endLat]] };
+
+      summary = {
+        totalDistance: (bestOption.totalDist / 1000).toFixed(2) + ' km',
+        totalTime: Math.ceil(bestOption.totalTime) + ' mnt',
+        steps: [
+          { id: 'step-first', icon: legLabel.icon, text: `${legLabel.text} sejauh ${(leg1.walkDist1 > 1000 ? (leg1.walkDist1/1000).toFixed(1)+' km' : Math.round(leg1.walkDist1)+' meter')} menuju <b>Halte ${leg1.startHalte.nama_halte}</b>.`, dist: Math.round(leg1.walkDist1)+' m', time: Math.ceil(leg1.walkTime1)+' mnt' },
+          { id: 'step-bus-1', icon: 'fa-bus', text: `Naik bus <b>Trans Padang Koridor ${bestOption.koridors[0]}</b> sejauh ${(leg1.busDist/1000).toFixed(1)} km. Turun di <b>Halte ${bestOption.t1.nama_halte}</b>.`, dist: (leg1.busDist/1000).toFixed(1)+' km', time: Math.ceil(leg1.busTime)+' mnt' },
+          { id: 'step-transit', icon: 'fa-exchange-alt', text: `Jalan kaki transit sejauh ${Math.round(bestOption.transitDist)} meter menuju <b>Halte ${bestOption.t2.nama_halte}</b>.`, dist: Math.round(bestOption.transitDist)+' m', time: Math.ceil(bestOption.transitWalkTime)+' mnt' },
+          { id: 'step-bus-2', icon: 'fa-bus', text: `Pindah ke bus <b>Trans Padang Koridor ${bestOption.koridors[1]}</b>. Menempuh ${(leg2.busDist/1000).toFixed(1)} km. Turun di <b>Halte ${leg2.endHalte.nama_halte}</b>.`, dist: (leg2.busDist/1000).toFixed(1)+' km', time: Math.ceil(leg2.busTime)+' mnt' },
+          { id: 'step-last', icon: legLabel.icon, text: `Setelah turun, ${legLabel.endText.toLowerCase()} sejauh ${(leg2.walkDist2 > 1000 ? (leg2.walkDist2/1000).toFixed(1)+' km' : Math.round(leg2.walkDist2)+' meter')} ke tujuan.`, dist: Math.round(leg2.walkDist2)+' m', time: Math.ceil(leg2.walkTime2)+' mnt' }
+        ]
+      };
+      
+      features = [
+        { type: 'Feature', properties: { id: 'step-first', type: travelMode, description: `${legLabel.text} ke halte` }, geometry: leg1Geom },
+        { type: 'Feature', properties: { id: 'step-bus-1', type: 'bus_route', koridor: bestOption.koridors[0], description: `Naik Koridor ${bestOption.koridors[0]}` }, geometry: legBus1Geom },
+        { type: 'Feature', properties: { id: 'step-transit', type: travelMode, description: 'Jalan Kaki Transit' }, geometry: transitWalkGeom },
+        { type: 'Feature', properties: { id: 'step-bus-2', type: 'bus_route', koridor: bestOption.koridors[1], description: `Naik Koridor ${bestOption.koridors[1]}` }, geometry: legBus2Geom },
+        { type: 'Feature', properties: { id: 'step-last', type: travelMode, description: `${legLabel.endText} ke tujuan` }, geometry: leg2Geom }
+      ];
     } else {
       const { startHalte, endHalte, walkDist1, busDist, walkDist2, walkTime1, busTime, walkTime2, totalDist, totalTime, leg1, legBus, leg2, h1Coords, h2Coords } = bestOption;
       
@@ -280,7 +314,7 @@ exports.getInteractiveRoute = async (req, res) => {
       
       features = [
         { type: 'Feature', properties: { id: 'step-first', type: travelMode, description: `${legLabel.text} ke halte` }, geometry: leg1Geom },
-        { type: 'Feature', properties: { id: 'step-bus', type: 'bus', koridor: startHalte.koridor, description: `Naik Koridor ${startHalte.koridor}` }, geometry: legBusGeom },
+        { type: 'Feature', properties: { id: 'step-bus', type: 'bus_route', koridor: startHalte.koridor, description: `Naik Koridor ${startHalte.koridor}` }, geometry: legBusGeom },
         { type: 'Feature', properties: { id: 'step-last', type: travelMode, description: `${legLabel.endText} ke tujuan` }, geometry: leg2Geom }
       ];
     }
