@@ -106,11 +106,14 @@ body, html {
 
 input[type="text"] {
   width: 100%;
-  padding: 14px 16px;
+  padding: 14px 40px 14px 16px;
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   font-family: 'Inter', sans-serif;
   font-size: 0.95rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
   background-color: var(--glass-bg);
   backdrop-filter: blur(10px);
   color: var(--text-main);

@@ -114,56 +114,59 @@ async function evaluateTransitCorridor(k1, k2, startLon, startLat, endLon, endLa
     let bestTransitOpt = null;
     let bestTransitScore = Infinity;
 
-    for (let pair of transitPairs) {
+    const transitResults = await Promise.all(transitPairs.map(async (pair) => {
       const t1 = pair.halte1;
       const t2 = pair.halte2;
       const t1Coords = JSON.parse(t1.geometry).coordinates;
       const t2Coords = JSON.parse(t2.geometry).coordinates;
 
-      // K1 Leg
-      const legK1 = await evaluateCorridor(k1, startLon, startLat, t1Coords[0], t1Coords[1], osrmProfile, travelMode);
-      if (!legK1) continue;
-      // We must force the end halte of legK1 to be t1. evaluateCorridor will naturally pick t1 because its distance to t1 is 0.
+      const [legK1, legK2] = await Promise.all([
+        evaluateCorridor(k1, startLon, startLat, t1Coords[0], t1Coords[1], osrmProfile, travelMode),
+        evaluateCorridor(k2, t2Coords[0], t2Coords[1], endLon, endLat, osrmProfile, travelMode)
+      ]);
 
-      // K2 Leg
-      const legK2 = await evaluateCorridor(k2, t2Coords[0], t2Coords[1], endLon, endLat, osrmProfile, travelMode);
-      if (!legK2) continue;
-      // Similarly, start halte of legK2 is naturally t2.
+      if (!legK1 || !legK2) return null;
 
-      // Transit Walk
-      const transitWalk = await fetchOSRMRoute(t1Coords[0], t1Coords[1], t2Coords[0], t2Coords[1], 'foot');
-      const transitDist = transitWalk ? transitWalk.distance : pair.transitDist;
-      const transitWalkTime = transitWalk ? transitWalk.duration : (transitDist / 83);
+      const transitDist = pair.transitDist;
+      const transitWalkTime = transitDist / 83;
+      const transitWalk = {
+         distance: transitDist,
+         duration: transitWalkTime,
+         geometry: { type: 'LineString', coordinates: [t1Coords, t2Coords] }
+      };
 
       const totalTime = legK1.totalTime + transitWalkTime + legK2.totalTime;
       const totalDist = legK1.totalDist + transitDist + legK2.totalDist;
 
-      // Score: heavy penalty on walking
       const walkTime1 = legK1.walkTime1;
       const walkTime2 = legK2.walkTime2;
       const totalWalkTime = walkTime1 + transitWalkTime + walkTime2;
       const totalBusTime = legK1.busTime + legK2.busTime;
 
       const score = (totalWalkTime * 10) + totalBusTime;
-      console.log('Transit score for ' + k1 + '->' + k2 + ' (via ' + t1.nama_halte + '-' + t2.nama_halte + '):', score, 'walkTime1:', walkTime1, 'walkTime2:', walkTime2, 'transitWalk:', transitWalkTime);
 
-      if (score < bestTransitScore) {
-        bestTransitScore = score;
-        bestTransitOpt = {
-          type: 'transit_route',
-          koridors: [k1, k2],
-          leg1: legK1,
-          leg2: legK2,
-          transitWalk: transitWalk,
-          transitWalkTime,
-          transitDist,
-          totalTime,
-          totalDist,
-          score,
-          t1, t2
-        };
+      return {
+        type: 'transit_route',
+        koridors: [k1, k2],
+        leg1: legK1,
+        leg2: legK2,
+        transitWalk: transitWalk,
+        transitWalkTime,
+        transitDist,
+        totalTime,
+        totalDist,
+        score,
+        t1, t2
+      };
+    }));
+
+    for (let res of transitResults) {
+      if (res && res.score < bestTransitScore) {
+        bestTransitScore = res.score;
+        bestTransitOpt = res;
       }
     }
+
     return bestTransitOpt;
   } catch(e) {
     console.error(e);
@@ -307,14 +310,14 @@ exports.getInteractiveRoute = async (req, res) => {
         totalTime: Math.ceil(totalTime) + ' mnt',
         steps: [
           { id: 'step-first', icon: legLabel.icon, text: `${legLabel.text} sejauh ${(walkDist1 > 1000 ? (walkDist1/1000).toFixed(1)+' km' : Math.round(walkDist1)+' meter')} menuju <b>Halte ${startHalte.nama_halte}</b>.`, dist: (walkDist1 > 1000 ? (walkDist1/1000).toFixed(1)+' km' : Math.round(walkDist1)+' m'), time: Math.ceil(walkTime1)+' mnt' },
-          { id: 'step-bus', icon: 'fa-bus', text: `Naik bus <b>Trans Padang Koridor ${startHalte.koridor}</b>. Menempuh sejauh ${(busDist/1000).toFixed(1)} km. Bersiaplah untuk turun di <b>Halte ${endHalte.nama_halte}</b>.`, dist: (busDist/1000).toFixed(1)+' km', time: Math.ceil(busTime)+' mnt' },
+          { id: 'step-bus', icon: 'fa-bus', text: `Naik bus <b>Trans Padang Koridor ${bestOption.koridor}</b>. Menempuh sejauh ${(busDist/1000).toFixed(1)} km. Bersiaplah untuk turun di <b>Halte ${endHalte.nama_halte}</b>.`, dist: (busDist/1000).toFixed(1)+' km', time: Math.ceil(busTime)+' mnt' },
           { id: 'step-last', icon: legLabel.icon, text: `Setelah turun, ${legLabel.endText.toLowerCase()} sejauh ${(walkDist2 > 1000 ? (walkDist2/1000).toFixed(1)+' km' : Math.round(walkDist2)+' meter')} ke titik tujuan akhir Anda.`, dist: (walkDist2 > 1000 ? (walkDist2/1000).toFixed(1)+' km' : Math.round(walkDist2)+' m'), time: Math.ceil(walkTime2)+' mnt' }
         ]
       };
       
       features = [
         { type: 'Feature', properties: { id: 'step-first', type: travelMode, description: `${legLabel.text} ke halte` }, geometry: leg1Geom },
-        { type: 'Feature', properties: { id: 'step-bus', type: 'bus_route', koridor: startHalte.koridor, description: `Naik Koridor ${startHalte.koridor}` }, geometry: legBusGeom },
+        { type: 'Feature', properties: { id: 'step-bus', type: 'bus_route', koridor: startHalte.koridor, description: `Naik Koridor ${bestOption.koridor}` }, geometry: legBusGeom },
         { type: 'Feature', properties: { id: 'step-last', type: travelMode, description: `${legLabel.endText} ke tujuan` }, geometry: leg2Geom }
       ];
     }

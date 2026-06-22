@@ -1,0 +1,207 @@
+{
+  "type": "FeatureCollection",
+  "summary": {
+    "totalDistance": "7.88 km",
+    "totalTime": "25 mnt",
+    "steps": [
+      {
+        "id": "step-first",
+        "icon": "fa-person-walking",
+        "text": "Jalan kaki sejauh 775 meter menuju <b>Halte Rs Puti Bungsu</b>.",
+        "dist": "775 m",
+        "time": "2 mnt"
+      },
+      {
+        "id": "step-bus",
+        "icon": "fa-bus",
+        "text": "Naik bus <b>Trans Padang Koridor K6</b>. Menempuh sejauh 6.0 km. Bersiaplah untuk turun di <b>Halte Rektorat</b>.",
+        "dist": "6.0 km",
+        "time": "20 mnt"
+      },
+      {
+        "id": "step-last",
+        "icon": "fa-person-walking",
+        "text": "Setelah turun, jalan kaki sejauh 1.1 km ke titik tujuan akhir Anda.",
+        "dist": "1.1 km",
+        "time": "3 mnt"
+      }
+    ]
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "step-first",
+        "type": "walk",
+        "description": "Jalan kaki ke halte"
+      },
+      "geometry": {
+        "coordinates": [
+          [
+            100.368296,
+            -0.943083
+          ],
+          [
+            100.366991,
+            -0.943388
+          ],
+          [
+            100.366373,
+            -0.943431
+          ],
+          [
+            100.366526,
+            -0.946594
+          ],
+          [
+            100.367954,
+            -0.946024
+          ],
+          [
+            100.367898,
+            -0.94591
+          ],
+          [
+            100.368067,
+            -0.945843
+          ]
+        ],
+        "type": "LineString"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "step-bus",
+        "type": "bus_route",
+        "description": "Naik Koridor K6"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            100.368089,
+            -0.945899
+          ],
+          [
+            100.37416,
+            -0.943877
+          ],
+          [
+            100.377221,
+            -0.942969
+          ],
+          [
+            100.38258,
+            -0.940438
+          ],
+          [
+            100.384631,
+            -0.939313
+          ],
+          [
+            100.391865,
+            -0.935891
+          ],
+          [
+            100.399255,
+            -0.933949
+          ],
+          [
+            100.43609,
+            -0.925761
+          ],
+          [
+            100.447987,
+            -0.923169
+          ],
+          [
+            100.455404,
+            -0.917394
+          ],
+          [
+            100.456817,
+            -0.914818
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "step-last",
+        "type": "walk",
+        "description": "Jalan kaki ke tujuan"
+      },
+      "geometry": {
+        "coordinates": [
+          [
+            100.456804,
+            -0.914814
+          ],
+          [
+            100.456764,
+            -0.915013
+          ],
+          [
+            100.456549,
+            -0.915481
+          ],
+          [
+            100.45653,
+            -0.915726
+          ],
+          [
+            100.45657,
+            -0.91592
+          ],
+          [
+            100.456725,
+            -0.916213
+          ],
+          [
+            100.45684,
+            -0.916331
+          ],
+          [
+            100.457533,
+            -0.916505
+          ],
+          [
+            100.4576,
+            -0.916749
+          ],
+          [
+            100.457855,
+            -0.917147
+          ],
+          [
+            100.458042,
+            -0.917606
+          ],
+          [
+            100.460296,
+            -0.916064
+          ],
+          [
+            100.459507,
+            -0.914993
+          ],
+          [
+            100.458793,
+            -0.91389
+          ],
+          [
+            100.458596,
+            -0.914156
+          ],
+          [
+            100.458074,
+            -0.914544
+          ]
+        ],
+        "type": "LineString"
+      }
+    }
+  ]
+}
