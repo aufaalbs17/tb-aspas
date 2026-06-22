@@ -4,5 +4,6 @@
       "source": "/api/:path*",
       "destination": "https://tb-aspas-production.up.railway.app/api/:path*"
     }
-  ]
+  ],
+  "cleanUrls": true
 }
